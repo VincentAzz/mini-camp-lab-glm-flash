@@ -8,7 +8,6 @@ import { classA } from '@/content/vehicles/classA';
 import { overlandTruck } from '@/content/vehicles/overlandTruck';
 import { trailerRig } from '@/content/vehicles/trailerRig';
 import { classB } from '@/content/vehicles/classB';
-import { testrigVehicle } from '@/content/vehicles/_drill_testrig'; // ★T28 扩展演练临时导入
 import { Registry } from '@/core/registry';
 import type { VehicleModule } from '@/content/vehicles/types';
 
@@ -18,4 +17,3 @@ vehicleRegistry.register(classA); // T24（docs/03 §4.2.2；label「A型大巴�
 vehicleRegistry.register(trailerRig); // T25（决策 D4：皮卡+拖挂注册为单一模块；label「拖挂房车」★docs/00 一.12 ★-label 统一）
 vehicleRegistry.register(classB); // T26（docs/03 §4.2.4；label「B型面包车」）
 vehicleRegistry.register(overlandTruck); // T27 越野皮卡（docs/03 §4.2.5；label「越野皮卡」）
-vehicleRegistry.register(testrigVehicle); // ★T28 扩展演练临时行（_drill_testrig.ts；revert 时一并移除）
