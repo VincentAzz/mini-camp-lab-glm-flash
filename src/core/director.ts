@@ -41,6 +41,7 @@ import type {
   LampHandle,
   ParticleEmitterHandle,
   SharedAssets,
+  WeatherSurface,
 } from '@/systems/handles';
 import { Rng } from '@/shared/rng';
 import type {
@@ -225,6 +226,7 @@ interface AssembledVehicle {
   readonly module: VehicleModule;
   readonly root: THREE.Group;
   readonly cloths: readonly ClothHandle[];
+  readonly surfaces: readonly WeatherSurface[];
   readonly lamps: readonly LampHandle[];
   readonly scope: AssetScope;
 }
@@ -250,6 +252,7 @@ interface VehicleBuildSession {
   scope: AssetScope | null;
   rng: Rng | null;
   readonly cloths: ClothHandle[];
+  readonly surfaces: WeatherSurface[];
 }
 
 export interface DirectorOptions {
@@ -525,7 +528,7 @@ export class Director {
     if (!this.vehicle || toId === this.vehicle.id) return;
     const module = this.vehicleRegistry.get(toId);
     const old = this.vehicle;
-    const session: VehicleBuildSession = { module, root: null, scope: null, rng: null, cloths: [] };
+    const session: VehicleBuildSession = { module, root: null, scope: null, rng: null, cloths: [], surfaces: [] };
     const delegate: FadeSwapDelegate = {
       buildStage: (stage) => this.buildVehicleStage(session, stage),
       getNewRoot: () => session.root,
@@ -546,7 +549,8 @@ export class Director {
     }
     if (this.vehicleSwap?.update(dt)) {
       this.vehicleSwap = null;
-      this.dequeueVehicleSwap();
+      if (this.vehicle) this.placeVehicle(this.vehicle); // FadeSwap 淡入收尾写 root.y=0——车型按 campAnchor 复位
+      this.dequeueVehicleSwap();                         // （groundY≠0 场景实测偏离；T23 修复，见 T23 记录）
     }
   }
 
@@ -706,7 +710,7 @@ export class Director {
     this.breath.unregister(scene.lamps);
     for (const handle of scene.emitterHandles) handle.dispose();
     this.weatherMaterial.detach(); // 云影 quad/反光条容器随旧根摘除
-    this.weatherMaterial.clearRegistrations(); // 天气面/反光条/雪壳（车型面今日为空，见 openIssues）
+    this.weatherMaterial.clearRegistrations(); // 天气面/反光条/雪壳全清（车型面由 activateScene 按新会话重注册）
     this.outline.removeFrom(oldRoot);
     oldRoot.removeFromParent();
     this.timeLight.releaseFireLight();
@@ -716,6 +720,7 @@ export class Director {
   private unloadVehicle(vehicle: AssembledVehicle, oldRoot: THREE.Object3D): void {
     this.wind.unregister(vehicle.cloths);
     this.breath.unregister(vehicle.lamps);
+    if (vehicle.surfaces.length > 0) this.weatherMaterial.unregister(vehicle.surfaces);
     this.outline.removeFrom(oldRoot);
     oldRoot.removeFromParent();
     vehicle.scope.release();
@@ -746,6 +751,9 @@ export class Director {
     // 当前 time 立即下发（场景钩子 blend=1；天空/雾经帧汇随 apply 流出）
     this.applyLightingNow(this.lastSnapshot.global, this.lastSnapshot.channels, 1);
     if (this.vehicle) this.placeVehicle(this.vehicle); // 按新 campAnchor 重新对位（三·总则）
+    if (this.vehicle && this.vehicle.surfaces.length > 0) {
+      this.weatherMaterial.register(this.vehicle.surfaces); // 场景卸载 clearRegistrations 连带清空车型面——重注册
+    }
   }
 
   private activateVehicle(session: VehicleBuildSession, _newRoot: THREE.Object3D): void {
@@ -757,6 +765,7 @@ export class Director {
       module: session.module,
       root: session.root,
       cloths: session.cloths,
+      surfaces: session.surfaces,
       lamps: session.module.interiorLightHooks.lamps,
       scope: session.scope,
     };
@@ -787,10 +796,11 @@ export class Director {
         if (!part.node.parent) session.root.add(part.node); // 模块已挂入 exterior 组的不重复接管
       }
       session.cloths.push(...exterior.cloths);
+      session.surfaces.push(...(exterior.weatherSurfaces ?? [])); // 车顶/布顶天气挂点（T23 对齐，T17 遗留②）
       this.applyCampPlacement(session.root, camp, exterior.footprint);
       return;
     }
-    // stage 1：③ 透视内饰 + 注册（cloths→Wind / interior lamps→Breath 'interior' 通道）+ 描边
+    // stage 1：③ 透视内饰 + 注册（cloths→Wind / interior lamps→Breath 'interior' 通道 / weatherSurfaces→WeatherMaterial）+ 描边
     const ctx = {
       root: session.root!,
       camp: this.currentCampSnapshot(),
@@ -802,12 +812,13 @@ export class Director {
     this.wind.register(session.cloths);
     this.breath.register(module.interiorLightHooks.lamps);
     for (const lamp of module.interiorLightHooks.lamps) this.breath.bindChannel(lamp, 'interior');
+    if (session.surfaces.length > 0) this.weatherMaterial.register(session.surfaces);
     this.outline.applyTo(session.root!, { defaultTier: 'vehicle' });
     session.scope?.close(); // 构建完成：停止记账
   }
 
   private assembleVehicleNow(module: VehicleModule): AssembledVehicle {
-    const session: VehicleBuildSession = { module, root: null, scope: null, rng: null, cloths: [] };
+    const session: VehicleBuildSession = { module, root: null, scope: null, rng: null, cloths: [], surfaces: [] };
     this.buildVehicleStage(session, 0);
     this.buildVehicleStage(session, 1);
     const root = session.root;
@@ -818,6 +829,7 @@ export class Director {
       module,
       root,
       cloths: session.cloths,
+      surfaces: session.surfaces,
       lamps: module.interiorLightHooks.lamps,
       scope: session.scope,
     };

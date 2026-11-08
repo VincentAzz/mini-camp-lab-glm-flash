@@ -484,6 +484,21 @@ export class WeatherMaterialSystem implements TimeChannelSink {
     this.strips.length = 0;
   }
 
+  /**
+   * 反注册（车型卸载 §3.5.3；T23 对齐：VehicleExterior.weatherSurfaces 生命周期随车型交换/卸载）。
+   * 按 mesh/material 引用摘除，未知项幂等跳过；不 dispose 内容侧材质/网格（同 clearRegistrations 纪律）。
+   */
+  unregister(surfaces: readonly WeatherSurface[]): void {
+    for (const surface of surfaces) {
+      this.registeredMaterials.delete(surface.material.uuid);
+      const shell = surface.snowShell;
+      if (shell) {
+        const at = this.shells.findIndex((binding) => binding.mesh === shell);
+        if (at >= 0) this.shells.splice(at, 1);
+      }
+    }
+  }
+
   /* ============================ 镜面反光条（castReflection） ============================ */
 
   /**

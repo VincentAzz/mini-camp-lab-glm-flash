@@ -1,10 +1,15 @@
 // docs/01-整体架构.md §3.2 content/vehicles/registry.ts —— vehicleRegistry：登记 5 车型（§3.3.3 尾）。
-// 当前登记：临时桩车型（T17 编排验证，id 占用 'classC' 槽位）。
-// ★ 注册行替换点：T23 classC / T24 classA / T25 trailerRig（D4 单模块）/ T26 classB / T27
-//   overlandTruck 各自完成后，把下方 import 与 register 行替换为对应正式模块（注册一行即被识别）。
-import { stubVehicle } from '@/content/vehicles/_stub';
+// 当前登记：classC 正式模块（T23，isDefault 默认车型槽位）。
+// ★ 注册行替换点：T24 classA / T25 trailerRig（D4 单模块）/ T26 classB / T27 overlandTruck 各自
+//   完成后，在此追加 register 行（注册一行即被识别）；_stub.ts 保留不删，待 T48 收尾统一处置
+//   （九.4：只登记不删除；stubVehicle 已不在注册表中，仅作为 T17 编排验证的历史文件留存）。
+import { classC } from '@/content/vehicles/classC';
 import { Registry } from '@/core/registry';
 import type { VehicleModule } from '@/content/vehicles/types';
 
 export const vehicleRegistry = new Registry<VehicleModule>();
-vehicleRegistry.register(stubVehicle); // isDefault：默认车型槽位（正式模块完成后替换本行）
+vehicleRegistry.register(classC); // isDefault：默认车型（docs/03 §4.2.1「C型房车（默认车型）」）
+// vehicleRegistry.register(classA);        // T24
+// vehicleRegistry.register(trailerRig);    // T25（决策 D4：皮卡+拖挂注册为单一模块）
+// vehicleRegistry.register(classB);        // T26
+// vehicleRegistry.register(overlandTruck); // T27

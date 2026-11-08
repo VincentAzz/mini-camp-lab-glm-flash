@@ -4,7 +4,14 @@
 import type * as THREE from 'three';
 import type { RegistryEntry } from '@/core/registry';
 import type { Rng } from '@/shared/rng';
-import type { ClothHandle, LampHandle, RGB, SharedAssets } from '@/systems/handles';
+import type { ClothHandle, LampHandle, RGB, SharedAssets, WeatherSurface } from '@/systems/handles';
+
+/** 玻璃三档静态基准档位（docs/03 §4.2.0：clear 大面积主窗 / tinted 前挡舷窗 / porthole 圆舷窗；
+ * 全车窗 opacity 落 0.22–0.40 同一区间，与 docs/04 §5.5 口径一致）。 */
+export const GLASS_OPACITY = { clear: 0.24, tinted: 0.4, porthole: 0.3 } as const;
+
+/** 夜间可透视窗修正目标（applyInteriorLight 随 interiorPower 插值下限，docs/04 §5.5「降至 0.22」）。 */
+export const GLASS_NIGHT_OPACITY = 0.22;
 
 /** 场景营位锚点快照（§3.3.3「接地高度/朝向/半径」；Director 从 SceneTerrain.campAnchor 提取下发）。 */
 export interface CampAnchorSnapshot {
@@ -96,6 +103,9 @@ export interface VehicleExterior {
   readonly windows: readonly WindowSpec[];
   /** 车辆布料件（遮阳棚/纱帘/帐帘/遮阳幕）→ WindSystem + 雨天积水下凹 */
   readonly cloths: readonly ClothHandle[];
+  /** 车顶/布顶天气挂点（docs/03 §4.2 各车 weatherSurfaces=roofTop/clothTop；可选——T23 起经本字段
+   * 交 Director 注册 WeatherMaterialSystem；T17 遗留②对齐，缺省视为无挂点） */
+  readonly weatherSurfaces?: readonly WeatherSurface[];
 }
 
 /** 展开机构部件（§3.3.3）。 */
