@@ -7,6 +7,7 @@ import { seacliffScene } from '@/content/scenes/seacliff';
 import { serviceareaScene } from '@/content/scenes/servicearea';
 import { wastelandScene } from '@/content/scenes/wasteland';
 import { pineforestScene } from '@/content/scenes/pineforest';
+import { lakesideDrillScene } from '@/content/scenes/_drill_lakeside'; // ★T22 演练临时行：随演练提交一并 revert 撤销
 import { Registry } from '@/core/registry';
 import type { SceneModule } from '@/content/scenes/types';
 
@@ -15,3 +16,4 @@ sceneRegistry.register(seacliffScene); // isDefault：默认场景槽位（T18 �
 sceneRegistry.register(serviceareaScene); // T21：高速路服务区（shopPower 通道 + 车流）
 sceneRegistry.register(wastelandScene); // T20：末日避难所（§4.1.3「sceneRegistry.register(wasteland)」）
 sceneRegistry.register(pineforestScene); // T19：山间松林（§4.1.2「sceneRegistry.register(pineforest)」）
+sceneRegistry.register(lakesideDrillScene); // ★T22 演练临时行：验证「新增场景=新文件+本文件一行注册，零核心改动」
