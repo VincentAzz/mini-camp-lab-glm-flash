@@ -39,12 +39,13 @@ export function createWheelGeometries(assets: SharedAssets, id: string, params: 
   const tire = assets.geometry(`${cacheId}/tire`, () => {
     const parts: THREE.BufferGeometry[] = [hardenEdges(new THREE.CylinderGeometry(radius, radius, width, 20))];
     if (kind === 'at') {
-      // 18 只绕周凸块（Cylinder 轴=Y 时圆周在 XZ 面；整组最后 rotateX 转到轴=Z）
+      // 18 只绕周凸块（T27 修复：Cylinder 轴=Y 时圆周在 XZ 面——凸块先沿 +Z 径向外推再绕 Y 均布；
+      //  原实现沿轴向 +Y 平移导致 18 只同位堆叠在轴端，不构成绕周胎纹）
       const lugHeight = radius * 0.16;
       for (let i = 0; i < lugCount; i++) {
         const angle = (i / lugCount) * Math.PI * 2;
-        const lug = new THREE.BoxGeometry(width * 0.92, lugHeight, radius * 0.13);
-        lug.translate(0, radius + lugHeight * 0.32, 0);
+        const lug = new THREE.BoxGeometry(radius * 0.13, width * 0.92, lugHeight);
+        lug.translate(0, 0, radius + lugHeight * 0.32);
         lug.rotateY(angle);
         parts.push(hardenEdges(lug)); // 全部件统一 toNonIndexed（mergeGeometries 索引一致性）
       }

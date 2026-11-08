@@ -20,3 +20,7 @@ export { createScreenPanel } from './vehicleKit/screenPanel';
 export type { ScreenPanelParams, ScreenPanelResult } from './vehicleKit/screenPanel';
 export { createBooksStack } from './vehicleKit/booksStack';
 export type { BooksStackParams } from './vehicleKit/booksStack';
+export { createAwningAssembly } from './vehicleKit/awningAssembly';
+export type { AwningAssemblyParams, AwningAssemblyResult } from './vehicleKit/awningAssembly';
+export { createBikeFolding } from './vehicleKit/bikeFolding';
+export type { BikeFoldingParams } from './vehicleKit/bikeFolding';

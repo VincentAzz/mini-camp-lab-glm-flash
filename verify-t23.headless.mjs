@@ -4,7 +4,7 @@
 import { registerHooks } from 'node:module';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import path from 'node:path';
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import ts from 'typescript';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -50,16 +50,22 @@ globalThis.document = {
 
 registerHooks({
   resolve(specifier, context, next) {
+    // 候选解析：p.ts → p/index.ts（T27 起部件库出现 barrel 目录导入，vite 可解析、无头钩子手动补）
+    const resolveCandidates = (base) => {
+      if (/\.[cm]?[jt]sx?$/.test(base)) return base;
+      for (const f of [`${base}.ts`, path.join(base, 'index.ts')]) {
+        if (existsSync(f)) return f;
+      }
+      return `${base}.ts`;
+    };
     if (specifier.startsWith('@/')) {
-      let p = specifier.slice(2);
-      if (!/\.[cm]?[jt]sx?$/.test(p)) p += '.ts';
-      return next(pathToFileURL(path.join(here, 'src', p)).href, context);
+      return next(pathToFileURL(resolveCandidates(path.join(here, 'src', specifier.slice(2)))).href, context);
     }
     if ((specifier.startsWith('./') || specifier.startsWith('../')) && context.parentURL) {
       const parentDir = new URL('.', context.parentURL);
       const resolved = new URL(specifier, parentDir);
       if (!/\.[cm]?[jt]sx?$/.test(resolved.pathname)) {
-        return next(new URL(`${resolved.href}.ts`), context);
+        return next(pathToFileURL(resolveCandidates(fileURLToPath(resolved.href))).href, context);
       }
     }
     return next(specifier, context);

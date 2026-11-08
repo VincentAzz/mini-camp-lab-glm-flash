@@ -356,6 +356,9 @@ interface FadeMeshEntry {
   readonly original: THREE.Material | readonly THREE.Material[];
   readonly originalCastShadow: boolean;
   readonly unsupported: boolean;
+  /** T27 对齐（潜伏缺陷修复）：authored 可见性（M4 雪壳等 authored visible=false 的挂点，
+   *  restore 不得盲目点亮——原实现恒写 visible=true，交换后雪壳闪现到下一帧 wm.update 才纠正）。 */
+  readonly originalVisible: boolean;
 }
 
 export interface FadeSet {
@@ -430,6 +433,7 @@ export function createFadeSet(root: THREE.Object3D): FadeSet {
       original: mesh.material,
       originalCastShadow: mesh.castShadow,
       unsupported: mapped.some((binding) => !binding.supportsOpacity),
+      originalVisible: mesh.visible,
     });
     mesh.material = Array.isArray(mesh.material)
       ? mapped.map((binding) => binding.clone)
@@ -458,7 +462,7 @@ export function createFadeSet(root: THREE.Object3D): FadeSet {
       for (const entry of entries) {
         entry.mesh.material = entry.original as THREE.Material | THREE.Material[];
         entry.mesh.castShadow = entry.originalCastShadow;
-        entry.mesh.visible = true;
+        entry.mesh.visible = entry.originalVisible; // 还原 authored 可见性（M4 雪壳 false 不被点亮——T27 修复）
       }
     },
     dispose(): void {
