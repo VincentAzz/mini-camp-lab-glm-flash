@@ -54,7 +54,7 @@
 
 ### P3 · 场景×4（T18–T22）
 
-- [ ] **T18 海崖 seacliff（默认场景）**：15 组元素 + 7 动效 + palette + lightHooks + campAnchor（对照 2.1、7.1）
+- [x] **T18 海崖 seacliff（默认场景）**（SceneModule 五部分完整；2.1.2 十五组逐组在场、7-1 七动效逐项落点、光照钩子行为表逐行——帆船四档/清晨餐具露水/黄昏串灯灯塔/夜间全亮+暖车窗光贴花、palette 12 通道、campAnchor §4.1.0 口径、重复元素 InstancedGroup、无人物；部件库首批 10 文件 waterSurface/rockCluster/benchSlat/foldTable/foldChair/clothMicro/signBoard/gardenHose/bicycle/campfire 全程序化+工厂取材；registry 已换 seacliffScene(isDefault)、_stub.ts 保留不删；153 DC≤200、4 档×4 天气合成帧回归零错误；地形落差为崖体抬升方案见 §5.2 R-P3-1①）✅ 2026-11-09
 - [ ] **T19 山间松林 pineforest**：12 组元素 + 7 动效（对照 2.2、7.2）
 - [ ] **T20 末日避难所 wasteland**：13 组元素 + 7 动效 + 治愈系红线自查（对照 2.3、7.3、一.5/一.6）
 - [ ] **T21 高速路服务区 servicearea**：12 组元素 + 5 动效 + shopPower 通道 + 车流（对照 2.4、7.4）
@@ -71,8 +71,8 @@
 
 ### P5 · 时间/天气（T29–T34）
 
-- [ ] **T29 timeRegistry 四档正式预设数据**（GlobalLightParams + 六通道 + transitionMs=1500；对照 四-1…四-4）
-- [ ] **T30 weatherRegistry 五档正式预设数据**（lightMod/particles/material 七分量/windMul；对照 五-1…五-5）
+- [x] **T29 timeRegistry 四档正式预设数据**（GlobalLightParams + 六通道 + transitionMs=1500；verify-t29t30.headless.mjs 文档逐格独立核对 pass=187 fail=0；复盘见 §5.2 R-P3-1）✅ 2026-11-09
+- [x] **T30 weatherRegistry 五档正式预设数据**（lightMod/particles/material 七分量/windMul；verify-t29t30.headless.mjs 文档逐格独立核对 pass=187 fail=0；复盘见 §5.2 R-P3-1）✅ 2026-11-09
 - [ ] **T31 通用装饰物状态 8 项端到端**（将熄未熄/余烬/餐具/露水/全熄/炊烟/黄昏点灯/星空月面；对照 四-1…四-4 通用面）
 - [ ] **T32 时间切换端到端验收**（4 场景×4 档全矩阵、四联动、1500ms、retarget）
 - [ ] **T33 天气切换端到端验收**（4 场景×5 档全矩阵、粒子交叉/材质插值/风力趋近）
@@ -144,6 +144,8 @@
 | 编号 | 日期 | 阶段/任务 | 对照原文小节 | 复盘结论（达成/偏差/遗留） | 后续动作 |
 |---|---|---|---|---|---|
 | R-P2-1 | 2026-11-08 | P1+P2 / T02–T17 基建与公共系统总装 | 八.5、八.4、一.3、六.5、四-5、五-6、D5 | 达成：T02–T07（engine 帧序/轨道相机/Registry·AppState·EventBus·四套 types/SharedAssets·canvasTex·InstancedGroup·ToonMaterialFactory/补丁冒烟/统一底座）+ T08–T16（clock/wind/particles/lightBreath/timeLight/weatherMaterial/atmosphere/scheduler/outline 十套公共系统）+ T17（Director+TransitionController：装配/卸载编排、四维切换路径、FadeSwap 材质克隆+分帧≤3、retarget、离散中点切换+0.2s 淡入、20 轮泄漏测试）全部实现；**门禁全绿**：`pnpm build`（tsc --noEmit 0 错 + vite build）2026-11-08 复跑通过；T05/T06/T07 复跑 verify-t05t06.headless.mjs＝ALL CHECKS PASSED、T15/T16 复跑 temp-t15-t16-smoke.mjs＝ALL PASS（node registerHooks 解析 '@/…'）；T17 另有无头编排冒烟 60+ 断言全过（临时桩场景/车型经 Director：默认组合首帧直呈不播过渡、时间 retarget 无跳变、天气粒子/风力/七分量插值收敛、场景/车型 600ms FadeSwap 时间线、队列深度 1 后到覆盖、footprint 越界告警、20 轮场景×车型交替交换 assets/发射器/灯点计数零漂移、dispose 清零）。如实注记：①T02 渲染循环/T03 相机交互的实机项本轮未复测（无头无 WebGL/DOM），按计划归 T39/T44 实机验收，本轮以门禁+静态接线为据勾选；②timeRegistry/weatherRegistry 为空（T29/T30 未落），main.ts 暂以空注册表注入、Director 一次性告警降级运行；③接口对齐三项遗留：LightBreath 写 emissiveIntensity 对工厂 emissiveLamp（MeshBasicMaterial）无视觉效果（T11/T05）、VehicleModule 缺 weatherSurfaces 产出字段（docs/03 §4.2 vs T04 types，T23 对齐）、clothTop uSnow 不达 wind 克隆材质（T13/T09，建议走 snowShell）；④baseAssembler 剪影板 PlaneGeometry 直建不经 SharedAssets、卸载无 dispose（T07 小额口径外泄漏，建议缓存键化） | T18 起按计划推进（P3/P4 可并行）；实机验收落 T39/T40/T44；四项遗留分别在 T23/T29/T30 及后续对齐任务处理 |
+| R-P3-1 | 2026-11-09 | P3+P5 / T18 海崖场景+部件库首批、T29/T30 时间天气预设数据 | 2.1、2.5、7-1、四-1…四-4、五-1…五-5、§4.3.2、§4.4.1、§4.1.0 | 达成：T18 SceneModule 五部分完整——地形（崖缘曲线+小海湾+湾水湾沙+海面 water 原型+2 层 additive 波光面+之字石阶）、2.1.2 十五组逐组在场、7-1 七动效逐项落点（布料/粒子/灯点只注册句柄+参数，docs/01 §3.4 归属裁定）、光照钩子行为表逐行（帆船四档位置表、清晨餐具+露水、黄昏串灯+灯塔 dusk 0.4/night 1.0、夜间全亮+泊港桅灯+暖车窗光贴花 0.35×interiorGlow）、palette 12 通道+baseFog 0.10、campAnchor §4.1.0 口径、重复元素 InstancedGroup（礁石12/草簇20/串灯14泡/栈道36板/护栏14桩/台阶22）、无人物红线自查通过；部件库首批 10 文件（waterSurface/rockCluster/benchSlat/foldTable/foldChair/clothMicro/signBoard/gardenHose/bicycle/campfire）全程序化+ToonMaterialFactory 取材；registry.ts 已换 seacliffScene(isDefault)（_stub.ts 保留不删）。T29/T30 四档/五档正式预设数据落地（timeRegistry dawn/day/dusk/night+六通道+transitionMs 1500；weatherRegistry clear/cloudy/rain/fog/snow+lightMod/particles/material 七分量/windMul）。**门禁全绿**：`tsc --noEmit` 0 错 + `vite build` 2026-11-09 复跑通过；`verify-t29t30.headless.mjs`（期望值逐格自 docs/05 §4.3.2/§4.4.1 独立转写）＝ALL CHECKS PASSED pass=187 fail=0；T18 另经内置浏览器 dev 钩子合成帧驱动（4 档×4 天气×过渡 blend 0→1 两轮）+ renderer.render 实测：153 DC ≤200、console.error/window.onerror 零捕获、帆船四档坐标/灯塔 0.4↔1.0/暖光贴花 0.35×interiorGlow/餐具 dawn 淡入逐项核过。如实注记：①海面下沉 −2.6 依赖底座顶板开孔而 T07 顶板为整版实心 Box，T18 采用崖体抬升方案（草坪台体 +1.2、海面 0.30/湾水 0.50/湾沙 0.62；campAnchor.position.y/groundY=1.2 为对 §4.1.0 表唯一偏差，x/z/heading/radius 逐字），正式修法待 T22/T43 顶板开孔/下沉层声明契约评审；②工厂 water 原型 fog uniforms 缺失（T05 遗留：buildWater ShaderMaterial fog:true 未并入 UniformsLib.fog，scene.fog 挂载后首帧渲染抛 TypeError 已实测复现）——已在 geom/parts/waterSurface.ts ensureFogUniforms 部件侧按引用兜底，待 T05/T43 回写工厂后移除；③LightBreath 注册期快照 authored emissiveIntensity 基值（authored 0 恒暗，T17 桩即此写法），T18 各灯按 1.3~1.5 authored，建议 T23–T28 统一核对纪律；④场景发射器锚点固定 campAnchor 且 setRate 未暴露给场景 lightHooks——steam rate 固定 2.6（白天值）、drip rate=0 占位，smokePower/天气门控调制待 Director/T33 接 emitterHandles；⑤露水 uDew/布面窄带属 T13/T43 材质层（T18 以 52 sparkle 1 DC 近似）；⑥早餐餐具 tableware.ts/treePine 零星松树/tex/signageTexts.ts 集中常量表三项因文件白名单未拆、内联于 seacliff.ts（T19/T20 复用时抽离）；⑦内置浏览器 IAB 后台 rAF 冻结致 T18 截图核对未完成（§6.7 注记 8 同源，行为验证以合成帧替代） | T19/T20/T21 按计划推进；①待 T22/T43、②待 T05/T43、③待 T23–T28、④待 T33、⑤待 T13/T43；实机观感归 T39/T44 |
+
 
 > **最终自查（T47）**将在此区追加一条总表：对照提示词全文一~十一节逐节结论，并链接各分章草稿的对照总表（11 章 §7、12 章 §1、13 章 §10、14 章 §7、15 章 §10）。
 
@@ -160,6 +162,7 @@
 | 5 | 降雪时松林晨雾保留强度（默认 ×0.6） | 14 章 §8.3-2 | 待验收观感标定 |
 | 6 | vite-plugin-singlefile（file:// 双击直开）是否引入 | 16 章 §7.2 | **已拍板（2026-11-08 用户确认按推荐）**：保留为备选、默认不引入（如实现阶段确需 file:// 直开，先更新本文件获确认再引入） |
 | 7 | 本地 git 仓库已于文档阶段 2026-11-08 初始化（仅 `git init`：零提交/零远程/零跟踪文件）；三文档原「尚未初始化 / 批准前不 git init / 门禁内禁止 git init」的记载与实际不符，已更正 | DEPENDENCIES §1、TASKS §4、docs/07-技术选型.md §2.10（原 DESIGN §2.10） | **已追认（2026-11-08 用户审阅通过）**：维持本地 git 仓库；不做任何删除 |
+| 8 | M1 实机冒烟环境注记：IAB webview 默认冻结 requestAnimationFrame——页内 rAF 诊断 3 秒采样 rafFiresIn3s=0（document.visibilityState 仍为 "visible"）、renderer.info.render.frame 长时间为 0、tab.screenshot() 连续报 "browser screenshot surface preparation timed out after 3000ms"；普通前台浏览器 rAF 即时运行不受影响，**非应用缺陷**（渲染仅发生在 rAF 帧序内，engine.ts setAnimationLoop）。实测处置：先经 visibility 能力 set(false→true) 唤醒合成器再截图/验证帧循环（唤醒后 frame 0→117→381、drawCalls=33，截图恢复） | M1 首屏实机冒烟（2026-11-08） | **已登记（2026-11-08）**：环境注记，不改应用代码；后续 IAB 实机冒烟（T39/T44 等）一律先执行该唤醒步骤 |
 
 ---
 

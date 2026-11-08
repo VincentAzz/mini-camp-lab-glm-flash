@@ -57,13 +57,13 @@ function buildProps(ctx: SceneBuildContext): SceneProps {
   group.name = 'stub/props';
   const rng: Rng = ctx.rng;
 
-  // —— 营地灯：LampHandle（MeshToonMaterial+emissive；正式模块走工厂 emissive 通道，见 openIssues）
-  const lampMat = new THREE.MeshToonMaterial({
+  // —— 营地灯：LampHandle（工厂 emissive 通道 toon 材质，走 ramp 渐变；LightBreath 'lamp' 通道驱动 emissiveIntensity）
+  const lampMat = toonMaterials.getToon('matteProp', {
     color: '#4a4034',
     emissive: '#ffc27d',
     emissiveIntensity: 0,
+    name: 'stub/lamp',
   });
-  lampMat.name = 'stub/lamp';
   const lampBody = new THREE.Mesh(ctx.assets.geometry('stub/lamp-body', () => new THREE.BoxGeometry(0.22, 0.3, 0.22)), lampMat);
   lampBody.name = 'stub/lamp-body';
   const pole = new THREE.Mesh(

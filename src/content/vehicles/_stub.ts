@@ -98,14 +98,15 @@ function buildDeployment(ctx: VehicleBuildContext): readonly DeploymentPart[] {
 
 /* —— ③ 透视内饰：内壳（noOutline）+ 床台 + 小夜灯（breath，'interior' 通道） —— */
 
-// 小夜灯材质：emissive toon（LightBreath 经 'interior' 通道驱动 emissiveIntensity；7-1-⑥ 呼吸落点）。
-// 模块级单例：LampHandle 注册/反注册幂等所需；正式模块（T23）改走工厂 emissive 通道。
-const nightLampMaterial = new THREE.MeshToonMaterial({
+// 小夜灯材质：工厂 emissive 通道 toon（走 ramp 渐变；LightBreath 经 'interior' 通道驱动
+// emissiveIntensity，7-1-⑥ 呼吸落点）。工厂「同原型+同参数命中缓存」天然保证模块级单例，
+// LampHandle 注册/反注册幂等所需；材质实例归工厂管理（disposeAll 仅整体销毁时调用）。
+const nightLampMaterial = toonMaterials.getToon('matteProp', {
   color: '#4a4034',
   emissive: '#ffce8a',
   emissiveIntensity: 0,
+  name: 'stub/night-lamp',
 });
-nightLampMaterial.name = 'stub/night-lamp';
 
 function buildInterior(ctx: VehicleBuildContext): VehicleInterior {
   const group = new THREE.Group();

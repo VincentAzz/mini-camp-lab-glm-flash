@@ -145,6 +145,10 @@ export interface ToonMaterialParams {
   /** 直接指定着色 ramp 贴图（RGB ramp 补丁①的着色 ramp：海面/逆光剪影，色档用 canvasTex RampStop.color） */
   rampTexture?: THREE.Texture;
   opacity?: number;
+  /** emissive 自发光通道（灯体 toon——LampHandle.emissiveMat 消费方；LightBreath 注册期快照基值后逐帧驱动，§5.2） */
+  emissive?: THREE.ColorRepresentation;
+  /** emissive 初值强度（内容侧 authored 基值；默认 1 = three 内建默认，不传即与普通 toon 材质无差别） */
+  emissiveIntensity?: number;
   /** 描边参与标记（false → userData.noOutline，§5.3） */
   outline?: boolean;
   /** 补丁①：RGB 色阶（getGradientIrradiance 采 .rgb） */
@@ -487,9 +491,14 @@ export class ToonMaterialFactory {
     const rampKey = params.rampTexture ? params.rampTexture.uuid : `ramp:${params.ramp ?? d.ramp}`;
     const colorKey = params.color === undefined ? '-' : toHex(params.color);
     const mapKey = params.map ? params.map.uuid : '-';
+    // emissive 参与缓存键（同原型同色不同自发光不得共串——两桩灯体 emissive 色不同即靠此区分）
+    const emissiveKey =
+      params.emissive === undefined
+        ? '-'
+        : `e${toHex(params.emissive)},${(params.emissiveIntensity ?? 1).toFixed(3)}`;
     const opacity = params.opacity ?? (d.transparent ? 0.24 : 1);
     const key = [
-      archetype, rampKey, colorKey, mapKey,
+      archetype, rampKey, colorKey, mapKey, emissiveKey,
       `o${opacity === undefined ? '-' : opacity.toFixed(3)}`,
       `ol${params.outline === undefined ? '-' : (params.outline ? 1 : 0)}`,
       planKey(plan),
@@ -504,6 +513,21 @@ export class ToonMaterialFactory {
     if (hit) return hit;
     const material = this.build(archetype, params, plan, key);
     this.cache.set(key, material);
+    return material;
+  }
+
+  /**
+   * get() 的 MeshToonMaterial 收窄版：灯体等 LampHandle.emissiveMat 消费方需要该具体类型
+   * （LightBreath 逐帧写 emissiveIntensity）。water/emissiveLamp 两原型返回类型不同，编译期即排除。
+   */
+  getToon(
+    archetype: Exclude<ToonArchetype, 'water' | 'emissiveLamp'>,
+    params: ToonMaterialParams = {},
+  ): THREE.MeshToonMaterial {
+    const material = this.get(archetype, params);
+    if (!(material instanceof THREE.MeshToonMaterial)) {
+      throw new Error(`[toonMaterial] getToon：「${archetype}」未返回 MeshToonMaterial`);
+    }
     return material;
   }
 
@@ -537,6 +561,8 @@ export class ToonMaterialFactory {
       color: params.color ?? '#b8b8c0',
       map: params.map ?? null,
       gradientMap,
+      emissive: params.emissive ?? '#000000', // 默认黑 = three 内建默认，既有调用方行为不变
+      emissiveIntensity: params.emissiveIntensity ?? 1,
       transparent,
       opacity,
       fog: true,
