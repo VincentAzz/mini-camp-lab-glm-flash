@@ -1,1 +1,495 @@
-/* docs/01-整体架构.md §3.2 ui/uiStyle.css —— 磨砂玻璃质感/圆角/细描边/微动效（六.3）；字体用系统字体栈（不联网）；T37 落点。T01 占位。 */
+/* docs/01-整体架构.md §3.2 ui/uiStyle.css —— 磨砂玻璃质感/圆角/细描边/微动效（六.3）；T37/T39 落点。 */
+/* docs/06 §6.4 四关键词逐属性落点：半透明（.glass 渐变基线）/圆角（面板 18/按钮 9/圆钮 999）/
+   细描边（1px 白 22%）/柔和阴影（大半径低透明 + 顶部内高光）。@supports 降级不透明深底。
+   性能纪律（§6.4/§6.9）：backdrop-filter 元素 ≤3（标题条/面板/隐藏钮各一，ghost 不加 backdrop）；
+   动画只动 transform/opacity（data-busy 描边呼吸动 border-color 属 §6.2 明列允许集）；
+   will-change 仅动画期间。深色基线理由：暗场景玻璃不当最亮块（§6.4）。 */
+
+/* ————————————————— 设计令牌 ————————————————— */
+:root {
+  /* 强调色随时间档联动（§6.4）：JS 在 state:change{dim:'time'} 时覆写
+     --accent/--accent-soft（预计算 rgba 字符串，不用 color-mix）；此处初始值 = 默认档黄昏。 */
+  --accent: #ffbe6b;
+  --accent-soft: rgba(255, 190, 107, 0.3);
+  --ink: #eef2ff;
+  --ink-dim: rgba(238, 242, 255, 0.64);
+  --stroke: rgba(255, 255, 255, 0.22); /* 细描边：1px 白 22% */
+  --glass-hi: rgba(255, 255, 255, 0.16); /* 内高光 */
+  --glass-shadow: 0 10px 32px rgba(8, 12, 28, 0.35); /* 柔和阴影：大半径低透明 */
+  --seg-stroke: rgba(255, 255, 255, 0.14);
+  --seg-fill: rgba(255, 255, 255, 0.05);
+  --font-ui: system-ui, -apple-system, "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB",
+    "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+}
+
+/* ————————————————— UI 层根（§6.1 指针事件分层） ————————————————— */
+#ui-root {
+  position: fixed;
+  inset: 0;
+  pointer-events: none; /* 画布在 UI 元素之外任何位置可直接拖拽旋转，无死区 */
+  z-index: 40;
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  line-height: 1.45;
+  user-select: none;
+  -webkit-user-select: none;
+}
+#ui-root svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* ————————————————— 玻璃基线（§6.4 逐字） ————————————————— */
+.glass {
+  background: linear-gradient(165deg, rgba(40, 47, 78, 0.46), rgba(21, 26, 48, 0.4));
+  -webkit-backdrop-filter: blur(18px) saturate(1.45);
+  backdrop-filter: blur(18px) saturate(1.45);
+  border: 1px solid var(--stroke);
+  border-radius: 18px;
+  box-shadow: var(--glass-shadow), inset 0 1px 0 var(--glass-hi);
+}
+/* @supports 降级：不支持 backdrop-filter → 不透明深底（§6.4/§6.9） */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .glass {
+    background: rgba(20, 25, 45, 0.84);
+  }
+}
+
+/* ————————————————— 组合标题条（§6.3，T36） ————————————————— */
+.title-bar {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  max-width: 46vw; /* §6.3 省略兜底 */
+  padding: 8px 14px 8px 12px;
+  border-radius: 14px;
+  /* 不可交互：不恢复 pointer-events，点击穿透画布（§6.1 无死区） */
+}
+.title-dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--accent); /* 左侧 6px 装饰圆点随时间档变色（无含义，避免变成 HUD） */
+  box-shadow: 0 0 8px var(--accent-soft);
+}
+.title-swap {
+  position: relative;
+  min-width: 0;
+  display: grid;
+}
+/* 双 span 交替动画：旧文本上移淡出 140ms + 新文本淡入 180ms（总 300ms 内，§6.3） */
+.title-swap .tb {
+  grid-area: 1 / 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: calc(46vw - 52px); /* 46vw 兜底扣去圆点/内边距 */
+  opacity: 0;
+}
+.title-swap .tb.t-still {
+  opacity: 1;
+}
+.title-swap .tb.t-in {
+  animation: titleIn 180ms ease-out forwards;
+}
+.title-swap .tb.t-out {
+  animation: titleOut 140ms ease-in forwards;
+}
+@keyframes titleIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes titleOut {
+  from {
+    opacity: 1;
+    transform: none;
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-7px);
+  }
+}
+.title-swap .sep {
+  font-style: normal;
+  color: var(--accent); /* 分隔点 · 用 var(--accent) 着色（§6.3） */
+}
+
+/* ————————————————— 控制面板（§6.2 分段按钮，T35） ————————————————— */
+.panel {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(14px + env(safe-area-inset-bottom, 0px)); /* safe-area（T39） */
+  margin: 0 auto;
+  width: max-content;
+  max-width: calc(100vw - 20px);
+  padding: 12px 14px 13px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: auto; /* 可交互子元素单独恢复（§6.1） */
+}
+.rows {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.row-label {
+  flex: none;
+  width: 40px;
+  text-align: right;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  color: var(--ink-dim);
+}
+
+/* 过渡进行中的维度行：分段容器描边呼吸（§6.6 U6；按钮不置灰保持可改主意） */
+.seg {
+  display: flex;
+  gap: 5px;
+  padding: 2px;
+  border: 1px solid transparent;
+  border-radius: 11px;
+}
+.seg[data-busy] {
+  animation: busyBreath 900ms ease-in-out infinite;
+}
+@keyframes busyBreath {
+  0%,
+  100% {
+    border-color: rgba(255, 255, 255, 0.08);
+  }
+  50% {
+    border-color: var(--accent-soft);
+  }
+}
+
+/* 分段按钮：64×52（图标 20 上、文字 10.5 下），≥44px 触控目标（§6.2） */
+.seg-btn {
+  width: 64px;
+  height: 52px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 0;
+  font: inherit;
+  color: var(--ink-dim);
+  background: var(--seg-fill);
+  border: 1px solid var(--seg-stroke);
+  border-radius: 9px; /* 圆角：按钮 9（§6.4） */
+  cursor: pointer;
+  /* 微动效只动 transform/background-color/border-color/color（§6.2） */
+  transition: transform 120ms ease, background-color 160ms ease, border-color 160ms ease,
+    color 160ms ease;
+}
+.seg-btn:hover {
+  transform: translateY(-1px); /* hover 微抬（§6.2） */
+  color: var(--ink);
+  border-color: rgba(255, 255, 255, 0.32);
+}
+.seg-btn:active {
+  transform: scale(0.96); /* active 按压（§6.2） */
+}
+.seg-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+/* 选中三重信号（§6.2，兼容色弱）：填充底色 + 描边 + 图标强调色，附 seg-pop 回弹 */
+.seg-btn[aria-pressed="true"] {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--ink);
+  animation: segPop 280ms cubic-bezier(0.34, 1.56, 0.64, 1); /* 过冲一次回弹 */
+}
+.seg-btn[aria-pressed="true"] .seg-ico {
+  color: var(--accent);
+}
+@keyframes segPop {
+  0% {
+    transform: scale(0.92);
+  }
+  55% {
+    transform: scale(1.06);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+.seg-ico {
+  width: 20px;
+  height: 20px;
+}
+.seg-label {
+  font-size: 10.5px;
+  line-height: 1;
+  letter-spacing: 0.02em;
+}
+
+/* ————————————————— 页签条（compact 折叠 / 手动收起，T35②/T39） ————————————————— */
+.tabs {
+  display: none;
+  gap: 5px;
+}
+.tab {
+  flex: 1;
+  min-width: 52px;
+  height: 34px;
+  padding: 0 10px;
+  font: inherit;
+  font-size: 11.5px;
+  letter-spacing: 0.1em;
+  color: var(--ink-dim);
+  background: var(--seg-fill);
+  border: 1px solid var(--seg-stroke);
+  border-radius: 9px;
+  cursor: pointer;
+  transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease,
+    transform 120ms ease;
+}
+.tab:hover {
+  color: var(--ink);
+  transform: translateY(-1px);
+}
+.tab:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.tab[aria-pressed="true"] {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--ink);
+}
+/* 面板收起为 40px 页签条（§6.2 ②；会话内记忆不落盘——只切 class） */
+.panel.folded .rows {
+  display: none;
+}
+.panel.folded .tabs {
+  display: flex;
+}
+.panel.folded {
+  padding-bottom: 11px;
+}
+/* 窄屏页签模式（§6.2 响应式；class 由 JS 按媒体查询加减） */
+.panel.compact {
+  width: auto;
+  left: 10px;
+  right: 10px;
+  bottom: calc(8px + env(safe-area-inset-bottom, 0px));
+  padding: 9px 10px 10px;
+  gap: 7px;
+}
+.panel.compact .tabs {
+  display: flex;
+}
+.panel.compact .rows {
+  display: flex; /* 行容器保持显示——容器 display:none 会让 .row.expanded 无处渲染 */
+}
+.panel.compact .row {
+  display: none;
+}
+.panel.compact .row.expanded {
+  display: flex;
+}
+.panel.compact .row.expanded .seg {
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto; /* 超宽横向滚动（§6.2） */
+}
+.panel.compact .fold-btn {
+  display: none; /* 页签条即收起形态，角上折角钮隐去 */
+}
+
+/* 折角钮（面板右上角小圆钮；21 枚之 fold） */
+.fold-btn {
+  position: absolute;
+  top: -11px;
+  right: 10px;
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  color: var(--ink-dim);
+  background: linear-gradient(165deg, rgba(40, 47, 78, 0.55), rgba(21, 26, 48, 0.5));
+  border: 1px solid var(--stroke);
+  border-radius: 999px; /* 圆角：圆钮 999（§6.4） */
+  cursor: pointer;
+  transition: transform 120ms ease, color 160ms ease, border-color 160ms ease;
+}
+.fold-btn:hover {
+  transform: translateY(-1px);
+  color: var(--ink);
+}
+.fold-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.fold-btn svg {
+  width: 14px;
+  height: 14px;
+}
+.panel.folded .fold-btn svg {
+  transform: rotate(180deg); /* 展开态箭头翻转 */
+}
+
+/* ————————————————— 隐藏钮（右上，T38） ————————————————— */
+.hide-btn {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  color: var(--ink-dim);
+  cursor: pointer;
+  border-radius: 999px;
+  pointer-events: auto;
+}
+.hide-btn svg {
+  width: 18px;
+  height: 18px;
+}
+.hide-btn:hover {
+  color: var(--ink);
+}
+.hide-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ————————————————— ghost 把手（hidden 态唯一残留，§6.5） ————————————————— */
+.ghost-hit {
+  position: absolute;
+  top: 8px; /* 44×44 触屏命中区包住 30×30 ghost（§6.5） */
+  right: 8px;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  pointer-events: auto;
+  visibility: hidden; /* 非 hidden 态整体不可见不挡针 */
+}
+#ui-root.is-off .ghost-hit {
+  visibility: visible;
+}
+.ghost {
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink);
+  opacity: 0.22; /* §6.5 静置透明度 */
+  transition: opacity 160ms ease;
+}
+.ghost svg {
+  width: 17px;
+  height: 17px;
+}
+.ghost-hit:hover .ghost,
+.ghost-hit:focus-visible .ghost {
+  opacity: 0.8; /* hover/focus 升至 .8（§6.5） */
+}
+.ghost-hit:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 999px;
+}
+/* 触屏首次进入播一次呼吸提示 2.4s（§6.5 发现性；animationend 后由 JS 摘类） */
+.ghost.ghost-hint {
+  animation: ghostBreath 2.4s ease-in-out 1;
+}
+@keyframes ghostBreath {
+  0%,
+  100% {
+    opacity: 0.22;
+  }
+  50% {
+    opacity: 0.85;
+  }
+}
+
+/* ————————————————— 隐藏/呼出状态机（§6.5：260ms hide / 300ms show） ————————————————— */
+/* 三件（标题条+面板+隐藏钮）同时 translateY(-8px)+opacity→0；visibility:hidden 保留 DOM（呼出零重建） */
+#ui-root.is-dimmed .ui-hideable {
+  transform: translateY(-8px);
+  opacity: 0;
+}
+#ui-root.anim-hide .ui-hideable {
+  transition: transform 260ms ease-in, opacity 260ms ease-in;
+  will-change: transform, opacity; /* 仅动画期间（§6.4） */
+}
+#ui-root.anim-show .ui-hideable {
+  transition: transform 300ms ease-out, opacity 300ms ease-out;
+  will-change: transform, opacity;
+}
+#ui-root.is-off .ui-hideable {
+  visibility: hidden;
+}
+
+/* ————————————————— 动效降级（§6.4：prefers-reduced-motion 下 UI 装饰动效全关） ————————————————— */
+@media (prefers-reduced-motion: reduce) {
+  .seg-btn,
+  .tab,
+  .fold-btn,
+  .ghost,
+  .title-dot,
+  .seg {
+    transition: none !important;
+  }
+  .seg-btn:hover,
+  .seg-btn:active,
+  .tab:hover,
+  .fold-btn:hover {
+    transform: none;
+  }
+  .seg-btn[aria-pressed="true"] {
+    animation: none;
+  }
+  .seg[data-busy] {
+    animation: none;
+  }
+  .ghost.ghost-hint {
+    animation: none;
+  }
+  .title-swap .tb {
+    animation: none !important;
+  }
+  /* 标题静置态由 JS .no-anim 分支直写（.t-still 显隐），装饰动画不再启动 */
+  .no-anim .title-swap .tb.t-out {
+    display: none;
+  }
+  /* 隐藏/呼出为功能性位移：保留但瞬时完成 */
+  #ui-root.anim-hide .ui-hideable,
+  #ui-root.anim-show .ui-hideable {
+    transition-duration: 1ms;
+  }
+}
