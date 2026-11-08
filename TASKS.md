@@ -16,8 +16,8 @@
 
 | 阶段 | 任务数 | 状态 | 里程碑 |
 |---|---|---|---|
-| P1 脚手架 | 7 | 待开始 | M1：编排可跑 |
-| P2 公共系统 | 10 | 待开始 | |
+| P1 脚手架 | 7 | 已完成 ✅ 2026-11-08 | M1：编排可跑（达成——最小桩场景经 Director 可跑） |
+| P2 公共系统 | 10 | 已完成 ✅ 2026-11-08 | M1 |
 | P3 场景×4 | 5 | 待开始 | M2：默认组合真实内容合体 |
 | P4 车型×5 | 6 | 待开始 | |
 | P5 时间/天气 | 6 | 待开始 | M3：时间天气全维生效 |
@@ -27,30 +27,30 @@
 
 ---
 
-## 2. 任务清单（全部待开始）
+## 2. 任务清单（状态随进度实时更新）
 
 ### P1 · 脚手架（T01–T07）
 
 - [x] **T01 工程脚手架与依赖安装**（门禁已于 2026-11-08 解除：用户审阅通过 docs/00–09 并按推荐批准依赖表；2026-11-08 以工作流模式执行完成——typecheck 0 错 / build 冒烟通过 / grep dist 无真实外链，依赖版本与体积见 DEPENDENCIES.md、复盘见 §5.2 R-P1-1）✅ 2026-11-08
-- [ ] **T02 Engine 与渲染循环**（帧序/pixelRatio 钳制/dev DC 计数器/resize）
-- [ ] **T03 轨道相机自研**（球坐标+阻尼+Pointer Events 鼠标/触屏/边界 clamp）
-- [ ] **T04 注册表与状态基础设施**（Registry/AppState/EventBus/四套 types 接口含 M1–M4 句柄字段）
-- [ ] **T05 程序化资产基建**（SharedAssets 引用计数/canvasTex/geom 帮手/InstancedGroup/ToonMaterialFactory+ramp×5）
-- [ ] **T06 onBeforeCompile 补丁冒烟**（RGB ramp/高光带/rim + customProgramCacheKey + 降级路径；风险 R1 先手）
-- [ ] **T07 统一底座 BaseAssembler**（20×20 统一骨架 + BaseStyleSpec 消费 + 剪影板挂点）
+- [x] **T02 Engine 与渲染循环**（帧序/pixelRatio 钳制/dev DC 计数器/resize；src/core/engine.ts——实机渲染项按计划归 T44 实测，本轮以门禁+静态接线为据）✅ 2026-11-08
+- [x] **T03 轨道相机自研**（球坐标+阻尼+Pointer Events 鼠标/触屏/边界 clamp；src/core/controls.ts——交互手感实机项归 T39）✅ 2026-11-08
+- [x] **T04 注册表与状态基础设施**（Registry/AppState/EventBus/四套 types 接口含 M1–M4 句柄字段）✅ 2026-11-08
+- [x] **T05 程序化资产基建**（SharedAssets 引用计数/canvasTex/geom 帮手/InstancedGroup/ToonMaterialFactory+ramp×5；2026-11-08 复跑 verify-t05t06.headless.mjs 全过）✅ 2026-11-08
+- [x] **T06 onBeforeCompile 补丁冒烟**（RGB ramp/高光带/rim + customProgramCacheKey + 降级路径；风险 R1 先手；2026-11-08 复跑 verify-t05t06.headless.mjs 全过）✅ 2026-11-08
+- [x] **T07 统一底座 BaseAssembler**（20×20 统一骨架 + BaseStyleSpec 消费 + 剪影板挂点；同上复跑全过；遗留：剪影板几何缓存化建议见 §5.2 R-P2-1）✅ 2026-11-08
 
 ### P2 · 公共系统（T08–T17）
 
-- [ ] **T08 RhythmClock 全局节奏源**（T_base 3s 三档/gust 函数/相位分配/禁 setTimeout）
-- [ ] **T09 WindSystem + ClothHandle**（布料顶点位移/uSag 下凹/customDepthMaterial/windFactor（M1）/植被通道）
-- [ ] **T10 ParticleSystem + EmitterSpec**（8 种 kind 参数表/GPU 池/setRate 句柄/交叉淡化）
-- [ ] **T11 LightBreathSystem + LampHandle**（steady/breath/blink/rotate(rev|sweep)（M2）/halo/glowBoost）
-- [ ] **T12 TimeLightSystem + SceneLightState**（GlobalLightParams 应用器/六通道下发/线性空间插值）
-- [ ] **T13 WeatherMaterialSystem + WeatherSurface**（7 分量共享 uniform/uSnow 遮罩/uLineFade/云影/反光条/雪壳（M4））
-- [ ] **T14 AtmosphereSystem**（D6 单通道雾合成/剪影逐层雾化/云带驱动）
-- [ ] **T15 EventScheduler**（偶发排程器 + 海鸟/松鼠/纸巾/光斑/双闪五事件参数）
-- [ ] **T16 OutlineSystem**（反壳+物体级开关+实例化成对+宽度档+描边色三选一；post 接口保留不实现）
-- [ ] **T17 Director + TransitionController**（装配/卸载编排/四维切换路径/FadeSwap/retarget/分帧构建；泄漏测试 20 轮）
+- [x] **T08 RhythmClock 全局节奏源**（T_base 3s 三档/gust 函数/相位分配/禁 setTimeout）✅ 2026-11-08
+- [x] **T09 WindSystem + ClothHandle**（布料顶点位移/uSag 下凹/customDepthMaterial/windFactor（M1）/植被通道）✅ 2026-11-08
+- [x] **T10 ParticleSystem + EmitterSpec**（8 种 kind 参数表/GPU 池/setRate 句柄/交叉淡化）✅ 2026-11-08
+- [x] **T11 LightBreathSystem + LampHandle**（steady/breath/blink/rotate(rev|sweep)（M2）/halo/glowBoost；遗留：emissiveLamp 调制链对齐见 §5.2 R-P2-1）✅ 2026-11-08
+- [x] **T12 TimeLightSystem + SceneLightState**（GlobalLightParams 应用器/六通道下发/线性空间插值）✅ 2026-11-08
+- [x] **T13 WeatherMaterialSystem + WeatherSurface**（7 分量共享 uniform/uSnow 遮罩/uLineFade/云影/反光条/雪壳（M4））✅ 2026-11-08
+- [x] **T14 AtmosphereSystem**（D6 单通道雾合成/剪影逐层雾化/云带驱动）✅ 2026-11-08
+- [x] **T15 EventScheduler**（偶发排程器 + 海鸟/松鼠/纸巾/光斑/双闪五事件参数；2026-11-08 复跑 temp-t15-t16-smoke.mjs 全过）✅ 2026-11-08
+- [x] **T16 OutlineSystem**（反壳+物体级开关+实例化成对+宽度档+描边色三选一；post 接口保留不实现；2026-11-08 复跑 temp-t15-t16-smoke.mjs 全过）✅ 2026-11-08
+- [x] **T17 Director + TransitionController**（装配/卸载编排/四维切换路径/FadeSwap/retarget/分帧构建；泄漏测试 20 轮——2026-11-08 门禁 tsc+vite build 全绿；临时桩场景/车型最小可跑；无头编排冒烟 60+ 断言全过，实机项归 T32/T33/T40；复盘见 §5.2 R-P2-1）✅ 2026-11-08
 
 ### P3 · 场景×4（T18–T22）
 
@@ -143,8 +143,7 @@
 
 | 编号 | 日期 | 阶段/任务 | 对照原文小节 | 复盘结论（达成/偏差/遗留） | 后续动作 |
 |---|---|---|---|---|---|
-| R-P1-1 | 2026-11-08 | P1 / T01 工程脚手架与依赖安装 | 八.1、九.5、十.3 | 达成：pnpm 12.3.4 精确锁版（-E）实装 three@0.187.0 / vite@8.3.6 / typescript@5.9.3 / @types/three@0.187.0（版本实查：three 0.187.0 满足 ≥0.160；three 无 types 字段不自带类型，@types/three 必装且对齐；typescript registry latest=7.0.2 超出批准表「5.x」家族，按批准范围取 5.x 最新 5.9.3，登记 DEPENDENCIES §5）；体积实测：node_modules 表面 95 MB/2795 文件、pnpm store 增量≈0（安装前后均 1.9 GB、24 包全复用 0 下载）、dist 520 KB（JS 526.29 kB min / 130.47 kB gzip，当前仅空场景）；自验：typecheck 0 错、build 冒烟通过、grep dist 仅 2 处 w3.org 命名空间标识符（favicon xmlns 与 three createElementNS 常量）无真实外链。偏差：pnpm 12.3.4 实测不再读 package.json 的 pnpm.onlyBuiltDependencies（安装输出 WARN 实证），设置迁移至 pnpm-workspace.yaml（onlyBuiltDependencies: [esbuild]）并回写 DEPENDENCIES §5/§6.3。遗留：pnpm dev 内置浏览器渲染冒烟未跑（不在本次指令自验清单）；docs/07 §2.5 预置写法描述待按十.1 回写 | T02 起按 P1 顺序推进；docs/07 §2.5 文档修订待办；typescript 升 7.x 须先过 DEPENDENCIES 审批；pnpm 升 12.18.0 可选待批 |
-| — | — | — | — | — | — |
+| R-P2-1 | 2026-11-08 | P1+P2 / T02–T17 基建与公共系统总装 | 八.5、八.4、一.3、六.5、四-5、五-6、D5 | 达成：T02–T07（engine 帧序/轨道相机/Registry·AppState·EventBus·四套 types/SharedAssets·canvasTex·InstancedGroup·ToonMaterialFactory/补丁冒烟/统一底座）+ T08–T16（clock/wind/particles/lightBreath/timeLight/weatherMaterial/atmosphere/scheduler/outline 十套公共系统）+ T17（Director+TransitionController：装配/卸载编排、四维切换路径、FadeSwap 材质克隆+分帧≤3、retarget、离散中点切换+0.2s 淡入、20 轮泄漏测试）全部实现；**门禁全绿**：`pnpm build`（tsc --noEmit 0 错 + vite build）2026-11-08 复跑通过；T05/T06/T07 复跑 verify-t05t06.headless.mjs＝ALL CHECKS PASSED、T15/T16 复跑 temp-t15-t16-smoke.mjs＝ALL PASS（node registerHooks 解析 '@/…'）；T17 另有无头编排冒烟 60+ 断言全过（临时桩场景/车型经 Director：默认组合首帧直呈不播过渡、时间 retarget 无跳变、天气粒子/风力/七分量插值收敛、场景/车型 600ms FadeSwap 时间线、队列深度 1 后到覆盖、footprint 越界告警、20 轮场景×车型交替交换 assets/发射器/灯点计数零漂移、dispose 清零）。如实注记：①T02 渲染循环/T03 相机交互的实机项本轮未复测（无头无 WebGL/DOM），按计划归 T39/T44 实机验收，本轮以门禁+静态接线为据勾选；②timeRegistry/weatherRegistry 为空（T29/T30 未落），main.ts 暂以空注册表注入、Director 一次性告警降级运行；③接口对齐三项遗留：LightBreath 写 emissiveIntensity 对工厂 emissiveLamp（MeshBasicMaterial）无视觉效果（T11/T05）、VehicleModule 缺 weatherSurfaces 产出字段（docs/03 §4.2 vs T04 types，T23 对齐）、clothTop uSnow 不达 wind 克隆材质（T13/T09，建议走 snowShell）；④baseAssembler 剪影板 PlaneGeometry 直建不经 SharedAssets、卸载无 dispose（T07 小额口径外泄漏，建议缓存键化） | T18 起按计划推进（P3/P4 可并行）；实机验收落 T39/T40/T44；四项遗留分别在 T23/T29/T30 及后续对齐任务处理 |
 
 > **最终自查（T47）**将在此区追加一条总表：对照提示词全文一~十一节逐节结论，并链接各分章草稿的对照总表（11 章 §7、12 章 §1、13 章 §10、14 章 §7、15 章 §10）。
 
