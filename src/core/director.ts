@@ -501,7 +501,14 @@ export class Director {
     const delegate: FadeSwapDelegate = {
       buildStage: (stage) => this.buildSceneStage(session, stage),
       getNewRoot: () => session.root,
-      unloadOld: (oldRoot) => this.unloadScene(old, oldRoot),
+      unloadOld: (oldRoot) => {
+        this.unloadScene(old, oldRoot);
+        // ★T20 修补（系统性）：unloadScene→clearRegistrations() 会把新场景在 stage2 注册的
+        // 天气面/雪壳一并清空（FadeSwap 顺序=stage2 注册→unload 清空），导致切换后湿润/积雪/
+        // 雪壳驱动整体失效（海崖同样受累）。此处按新会话重注册；props 未建时（早卸载边角）由
+        // stage2 的 register 兜底，二者先后必居其一。
+        if (session.props) this.weatherMaterial.register(session.props.weatherSurfaces);
+      },
       beforeFadeIn: (newRoot) => this.activateScene(session, newRoot),
     };
     const runner = new FadeSwapRunner(delegate);
