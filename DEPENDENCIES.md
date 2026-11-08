@@ -14,9 +14,9 @@
 | pnpm | **12.3.4** | `pnpm --version` | `C:\Users\Tom\AppData\Roaming\npm\pnpm`（全局包装器） |
 | npm | 11.17.0（未用于本项目，仅基线记录） | `npm --version` | `C:\Program Files\nodejs\npm` |
 | 既有 npm 全局包（**7 项·既有·非本项目引入**） | @vue/cli@5.0.8、cnpm@8.4.0、json-server@1.0.0-alpha.19、miniprogram-to-uniapp@2.0.24、pnpm@12.3.4、slidev-theme-penguin@1.6.1、typescript@5.0.2 | `npm ls -g --depth=0`（2026-11-08 实测） | `C:\Users\Tom\AppData\Roaming\npm\`；pnpm 侧全局为空（`pnpm ls -g` → No global packages found）——npm 与 pnpm 全局目录不同，清单须分别采集 |
-| pnpm store（虚拟仓库根） | `E:\_Dev\node\pnpm-store\v11` | `pnpm store path` | 当前占用 **1.9 GB**——为既有全局共享内容，**非本项目引入**；本项目安装后增量见 §4 |
-| 项目本地 node_modules | 尚不存在（未搭建工程） | — | — |
-| 项目内 git 仓库 | **已初始化**（2026-11-08 文档阶段执行；实测 2026-11-08：仅 `git init`——零提交、零远程、全部文件未跟踪。原文九.5-b 本就允许项目目录内初始化本地 git，此前本表误记「尚未初始化（九.1 门禁内）」，已更正；**已追认（2026-11-08 用户审阅通过，维持本地仓库，不做任何删除）**） | `git rev-parse --is-inside-work-tree`、`git log --oneline --all`、`git remote -v`、`git status --short` | `mini-camp-diorama/.git`（HEAD/config 时间戳 2026-11-08 14:45） |
+| pnpm store（虚拟仓库根） | `E:\_Dev\node\pnpm-store\v11` | `pnpm store path` | T01 安装前后复测均 **1.9 GB**（本项目 24 包全部复用既有 store 内容、downloaded 0，增量≈0）——主体为既有全局共享内容，**非本项目引入** |
+| 项目本地 node_modules | **已存在**（2026-11-08 T01 实装）：表面 **95 MB** / **2795 文件**，解引用参考值同为 95 MB | `du -sh`、`find -type f \| wc -l`、`du -shL` | `mini-camp-diorama/node_modules`（pnpm 硬链接至 store） |
+| 项目内 git 仓库 | **已初始化**（2026-11-08 文档阶段执行；实测 2026-11-08：仅 `git init`——零提交、零远程、全部文件未跟踪。（**T01 复测 2026-11-08**：文档阶段已于同日 16:51–18:17 产生 3 个 `docs:` 前缀本地提交，最新 ffad1ac，零远程不变；T01 本身未做任何提交，脚手架与依赖改动待统一提交步骤。）原文九.5-b 本就允许项目目录内初始化本地 git，此前本表误记「尚未初始化（九.1 门禁内）」，已更正；**已追认（2026-11-08 用户审阅通过，维持本地仓库，不做任何删除）**） | `git rev-parse --is-inside-work-tree`、`git log --oneline --all`、`git remote -v`、`git status --short` | `mini-camp-diorama/.git`（HEAD/config 时间戳 2026-11-08 14:45） |
 
 > 结论：写入系统仓库的既有全局包共 **7 项**（全部 npm 侧，上表所列，**均既有·非本项目引入**）；pnpm 全局为空；本项目**不计划新增任何全局安装**（全部依赖进项目内，经 pnpm store 硬链接）。全局 typescript@5.0.2 的存在对本项目 §2.2 的 devDependency `typescript` 仅有版本参考意义，项目内仍独立安装锁定版本。（修订 2026-11-08：原结论「只有既有的 node/pnpm/npm 本体」系仅采集了 pnpm 侧清单所致，已按 `npm ls -g --depth=0` 实测更正。）
 
@@ -26,19 +26,19 @@
 
 ### 2.1 runtime dependencies（运行时依赖，打包进产物）
 
-| 名称 | 计划版本 | 用途 | 预计体积（安装 / 产物贡献） | 状态 |
-|---|---|---|---|---|
-| `three` | ≥0.160 近期稳定版，**安装时 `pnpm view three version` 实查后精确锁定**（16 章 §2.3；渲染章 §2.4 版本锁定要求） | 渲染引擎唯一 runtime 依赖：WebGL 渲染、MeshToonMaterial 卡通材质、Lathe/Extrude/InstancedMesh 程序化几何、examples/jsm（BufferGeometryUtils/EffectComposer 随包，不另计依赖） | 安装约 30–60 MB（node_modules，含 examples/jsm 源码）；产物 tree-shake 后贡献约 0.3–0.45 MB gzip | **计划引入·未安装** |
+| 名称 | 计划版本 | 用途 | 预计体积（安装 / 产物贡献） | 状态 | 实测（T01·2026-11-08） |
+|---|---|---|---|---|---|
+| `three` | ≥0.160 近期稳定版，**安装时 `pnpm view three version` 实查后精确锁定**（16 章 §2.3；渲染章 §2.4 版本锁定要求） | 渲染引擎唯一 runtime 依赖：WebGL 渲染、MeshToonMaterial 卡通材质、Lathe/Extrude/InstancedMesh 程序化几何、examples/jsm（BufferGeometryUtils/EffectComposer 随包，不另计依赖） | 安装约 30–60 MB（node_modules，含 examples/jsm 源码）；产物 tree-shake 后贡献约 0.3–0.45 MB gzip | **已安装**（实查 latest=0.187.0，满足 ≥0.160；`pnpm add -E` 精确锁定） | 零传递依赖（`pnpm list --depth=1`）；包内无 types/typings 字段（不自带类型 → @types/three 必装）；产物贡献见 §3 dist 实测 |
 
 > three 包内的 examples/jsm 子模块（BufferGeometryUtils.mergeGeometries、UnrealBloomPass 等）随 `three` 包分发，**不构成新增依赖行**（渲染章 §6.2/§7.4）。
 
 ### 2.2 devDependencies（构建/开发期，不进产物）
 
-| 名称 | 计划版本 | 用途 | 预计体积（安装） | 状态 |
-|---|---|---|---|---|
-| `vite` | 安装时最新稳定版 | dev server（内置浏览器调试走 localhost，九.2）+ 产物构建（16 章 §3） | ~20–40 MB（含 esbuild/rollup/postcss 等传递依赖；pnpm 硬链接后 store 实际新增占用按实装统计） | **计划引入·未安装** |
-| `typescript` | 最新稳定 5.x | `tsc --noEmit` 类型检查（strict；四套注册表/句柄接口编译期强制） | ~60–70 MB | **计划引入·未安装** |
-| `@types/three` | 与 three 主版本对齐 | three 的 TS 类型声明（若安装时 three 包已自带类型则**取消本行**并记入 §5 变更日志） | ~15–25 MB | **计划引入·未安装（视实装情况可取消）** |
+| 名称 | 计划版本 | 用途 | 预计体积（安装） | 状态 | 实测（T01·2026-11-08） |
+|---|---|---|---|---|---|
+| `vite` | 安装时最新稳定版 | dev server（内置浏览器调试走 localhost，九.2）+ 产物构建（16 章 §3） | ~20–40 MB（含 esbuild/rollup/postcss 等传递依赖；pnpm 硬链接后 store 实际新增占用按实装统计） | **已安装**（实查 latest=8.3.6，精确锁定） | 传递依赖：rolldown@1.2.16、lightningcss@1.33.0、postcss@8.5.32、picomatch@4.0.7、tinyglobby@0.2.17（+fsevents 可选）；vite 8 构建内核已换 rolldown |
+| `typescript` | 最新稳定 5.x | `tsc --noEmit` 类型检查（strict；四套注册表/句柄接口编译期强制） | ~60–70 MB | **已安装**（实查 registry latest=**7.0.2** 已超出本表批准的「5.x」家族——按批准范围取 5.x 最新 **5.9.3** 精确锁定；升 7.x 属依赖升级，须先改本表过审再动 package.json，十.3） | 零传递依赖 |
+| `@types/three` | 与 three 主版本对齐 | three 的 TS 类型声明（若安装时 three 包已自带类型则**取消本行**并记入 §5 变更日志） | ~15–25 MB | **已安装·保留**（实查 three@0.187.0 无 types/typings 字段、不自带类型，本行不可取消；0.187.0 与 three 精确对齐） | 类型层传递依赖（仅 d.ts 引用、不进产物）：@types/webxr@0.5.24、@types/stats.js@0.17.4、fflate@0.8.3、meshoptimizer@1.1.1、@tweenjs/tween.js@23.1.3、@dimforge/rapier3d-compat@0.12.0 |
 
 ### 2.3 备选依赖（未决定，引入前必须过审批）
 
@@ -54,14 +54,14 @@
 
 ## 3. 预计磁盘占用汇总（设计估算，实装后替换为实测）
 
-| 口径 | 预计 | 说明 |
-|---|---|---|
-| 项目 `node_modules` 表面体积 | ~130–200 MB | pnpm 符号链接结构，`du` 统计值；包体实际存放于 store |
-| pnpm store 实际新增占用 | ~80–130 MB（首次安装，硬链接去重后） | `du` store 前后差值；同版本包全局只存一份 |
-| `dist/` 构建产物 | ~1–2 MB（JS 主包 gzip 0.4–0.6 MB） | 无图片/字体/模型文件，全部资源运行时程序化生成 |
-| 全局仓库新增 | **0** | 不做任何全局安装 |
+| 口径 | 预计 | 实测（T01·2026-11-08） | 说明 |
+|---|---|---|---|
+| 项目 `node_modules` 表面体积 | ~130–200 MB | **95 MB**（2795 文件，`du -sh`/`find -type f \| wc -l`；解引用参考值同为 95 MB） | pnpm 符号链接结构，`du` 统计值；包体实际存放于 store。低于估算下限：vite 8（rolldown 内核）依赖面精简且全部 store 复用 |
+| pnpm store 实际新增占用 | ~80–130 MB（首次安装，硬链接去重后） | **≈0**（安装前后 `du -sh` 均 1.9 GB；24 包 resolved 全部 reused、downloaded 0） | `du` store 前后差值；同版本包全局只存一份。本轮所需包已全部在既有共享 store 中 |
+| `dist/` 构建产物 | ~1–2 MB（JS 主包 gzip 0.4–0.6 MB） | **520 KB**（`du -sh`；`vite build` 输出：JS 526.29 kB min / **130.47 kB gzip** + index.html 0.98 kB） | 无图片/字体/模型文件，全部资源运行时程序化生成。当前仅 T01 空场景骨架（three 全量核心已计入）；0.4–0.6 MB gzip 为 M2 内容合体后的目标区间，届时复核 |
+| 全局仓库新增 | **0** | **0**（T01 后复测：`pnpm ls -g` 为空；`npm ls -g --depth=0` 仍为 §1 所列既有 7 项，无增减） | 不做任何全局安装 |
 
-> 诚实声明：以上均为未实装的估算；T01 执行后以 §4 命令实测回填本节与 §2 表格，届时状态列翻转并记入 §5 变更日志。
+> 诚实声明：以上均为未实装的估算；T01 执行后以 §4 命令实测回填本节与 §2 表格，届时状态列翻转并记入 §5 变更日志。**（2026-11-08 已执行：见上表「实测」列；§2 状态列已翻转；变更见 §5。）**
 
 ---
 
@@ -89,6 +89,7 @@
 |---|---|---|---|---|---|
 | 2026-11-08 | 建档：登记 4 项计划依赖（three/vite/typescript/@types/three）+ 1 项备选（vite-plugin-singlefile），全部未安装 | — | 文档阶段 | 九.1 门禁中（待用户批准） | 无（未安装） |
 | 2026-11-08 | 回写：用户审阅通过全部文档并按推荐批准依赖表（three / vite / typescript / @types/three 维持计划引入；vite-plugin-singlefile 维持备选默认不引入）；仍未安装 | — | 文档阶段→实现前 | 已批准（安装随 T01 于下一会话执行） | 无（未安装） |
+| 2026-11-08 | **T01 首次实装**：`pnpm add -E three` + `pnpm add -D -E vite typescript@5.9.3 @types/three`（四包精确锁版，pnpm-lock.yaml 生成）。两处执行偏差如实登记：①typescript 实查 registry latest=7.0.2，超出本表批准的「5.x」家族，按批准范围取 5.x 最新 5.9.3（升 7.x 须先改本表过审，十.3）；②pnpm 12.3.4 实测不再读取 package.json 的 `pnpm.onlyBuiltDependencies`（安装输出 WARN 证实，docs/07 §2.5 与本文件 §6.3 预置写法失效），设置迁移至 pnpm-workspace.yaml（`onlyBuiltDependencies: [esbuild]`，`pnpm config get onlyBuiltDependencies` 确认生效），package.json 内失效字段已移除——pnpm-workspace.yaml 为新增工程配置文件，非依赖。T01 自验：`pnpm typecheck` 0 错；`pnpm build` 通过（JS 526.29 kB min / 130.47 kB gzip）；`grep -rE "https?://" dist/` 仅 2 处命中且均为 w3.org 命名空间标识符（favicon SVG 的 xmlns 与 three 内部 createElementNS 常量），非网络请求、无真实外链 | three 0.187.0 / vite 8.3.6 / typescript 5.9.3 / @types/three 0.187.0 | T01 | 依赖表已批准（2026-11-08）；typescript 在批准的 5.x 家族内取最新 | node_modules 表面 95 MB（2795 文件）；store 增量≈0（前后均 1.9 GB，24 包全复用 0 下载）；dist 520 KB（JS gzip 130.47 kB，当前仅空场景） |
 | — | — | — | — | — | — |
 
 ---
@@ -97,7 +98,7 @@
 
 1. **版本实查先行**：`pnpm view three version` / `pnpm view vite version`，实查结果回填 §2 表格再安装（16 章 §2.3：three ≥0.160 近期稳定）。
 2. **精确锁版**：`save-exact`（或安装时 `--save-exact`），`pnpm-lock.yaml` 提交本地 git。
-3. **pnpm 构建脚本审批**：pnpm ≥10 默认拦截 postinstall；esbuild（vite 传递依赖）可能触发 `pnpm approve-builds`——处理方式与结果记入 §5 变更日志；或预先在 package.json 写 `pnpm.onlyBuiltDependencies: ["esbuild"]`。
+3. **pnpm 构建脚本审批**：pnpm ≥10 默认拦截 postinstall；esbuild（vite 传递依赖）可能触发 `pnpm approve-builds`——处理方式与结果记入 §5 变更日志；或预先在 package.json 写 `pnpm.onlyBuiltDependencies: ["esbuild"]`。（**修订 2026-11-08 T01**：pnpm 12.3.4 实测不再读取 package.json 的 pnpm 字段，改为在 pnpm-workspace.yaml 写 `onlyBuiltDependencies: [esbuild]`，已生效；详见 §5。）
 4. **engines**：`"node": ">=20.19"`（本机 24.19.0 满足）。
 5. **离线复装**：依赖入 store 后可 `pnpm install --offline`；首次安装必然联网（构建期一次性，须先过 §2 审批）。
 6. **禁止事项**：不全局安装任何包；不用 npm/yarn 混装；不执行任何通配符/递归删除（node_modules 异常 → `pnpm install --force` 或整体重命名 `node_modules_broken`，九.4-b）。

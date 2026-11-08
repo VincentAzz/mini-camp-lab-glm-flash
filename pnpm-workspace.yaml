@@ -1,0 +1,4 @@
+# pnpm 12 起设置项新家为 pnpm-workspace.yaml（package.json 的 pnpm 字段已不再读取，实测 WARN 证实）。
+# 依据 DEPENDENCIES.md §6.3 / docs/07 §2.5：预置 onlyBuiltDependencies 放行 esbuild 的构建脚本。
+onlyBuiltDependencies:
+  - esbuild

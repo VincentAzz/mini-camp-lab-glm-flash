@@ -31,7 +31,7 @@
 
 ### P1 · 脚手架（T01–T07）
 
-- [ ] **T01 工程脚手架与依赖安装** ⛔→暂缓（门禁已于 2026-11-08 解除：用户审阅通过 docs/00–09 并按推荐批准依赖表；按用户指示实现阶段于下一会话以工作流模式启动，届时本行改 🚧 并执行）
+- [x] **T01 工程脚手架与依赖安装**（门禁已于 2026-11-08 解除：用户审阅通过 docs/00–09 并按推荐批准依赖表；2026-11-08 以工作流模式执行完成——typecheck 0 错 / build 冒烟通过 / grep dist 无真实外链，依赖版本与体积见 DEPENDENCIES.md、复盘见 §5.2 R-P1-1）✅ 2026-11-08
 - [ ] **T02 Engine 与渲染循环**（帧序/pixelRatio 钳制/dev DC 计数器/resize）
 - [ ] **T03 轨道相机自研**（球坐标+阻尼+Pointer Events 鼠标/触屏/边界 clamp）
 - [ ] **T04 注册表与状态基础设施**（Registry/AppState/EventBus/四套 types 接口含 M1–M4 句柄字段）
@@ -143,6 +143,7 @@
 
 | 编号 | 日期 | 阶段/任务 | 对照原文小节 | 复盘结论（达成/偏差/遗留） | 后续动作 |
 |---|---|---|---|---|---|
+| R-P1-1 | 2026-11-08 | P1 / T01 工程脚手架与依赖安装 | 八.1、九.5、十.3 | 达成：pnpm 12.3.4 精确锁版（-E）实装 three@0.187.0 / vite@8.3.6 / typescript@5.9.3 / @types/three@0.187.0（版本实查：three 0.187.0 满足 ≥0.160；three 无 types 字段不自带类型，@types/three 必装且对齐；typescript registry latest=7.0.2 超出批准表「5.x」家族，按批准范围取 5.x 最新 5.9.3，登记 DEPENDENCIES §5）；体积实测：node_modules 表面 95 MB/2795 文件、pnpm store 增量≈0（安装前后均 1.9 GB、24 包全复用 0 下载）、dist 520 KB（JS 526.29 kB min / 130.47 kB gzip，当前仅空场景）；自验：typecheck 0 错、build 冒烟通过、grep dist 仅 2 处 w3.org 命名空间标识符（favicon xmlns 与 three createElementNS 常量）无真实外链。偏差：pnpm 12.3.4 实测不再读 package.json 的 pnpm.onlyBuiltDependencies（安装输出 WARN 实证），设置迁移至 pnpm-workspace.yaml（onlyBuiltDependencies: [esbuild]）并回写 DEPENDENCIES §5/§6.3。遗留：pnpm dev 内置浏览器渲染冒烟未跑（不在本次指令自验清单）；docs/07 §2.5 预置写法描述待按十.1 回写 | T02 起按 P1 顺序推进；docs/07 §2.5 文档修订待办；typescript 升 7.x 须先过 DEPENDENCIES 审批；pnpm 升 12.18.0 可选待批 |
 | — | — | — | — | — | — |
 
 > **最终自查（T47）**将在此区追加一条总表：对照提示词全文一~十一节逐节结论，并链接各分章草稿的对照总表（11 章 §7、12 章 §1、13 章 §10、14 章 §7、15 章 §10）。
