@@ -1,7 +1,7 @@
 # DEPENDENCIES.md · 「微缩营地巡游」项目依赖统计
 
 > **定位**：本项目依赖统计文档（对应原文十.3 L147）：统计本项目引入的**全部依赖及其大小**——项目内依赖（package.json 的 dependencies/devDependencies、node_modules 与 pnpm 虚拟仓库体积）与写入系统仓库的依赖（pnpm/npm 全局包及其位置）；**每当依赖发生变化时同步更新本文件**，记录名称/版本/用途/体积，便于统计磁盘空间去向。
-> **硬性流程（九.1 L128 + 十.3 L147）**：下表当前全部为**「计划引入·未安装」**状态——实现文档（docs/00–09 十册分册，2026-11-08 由单一 DESIGN.md 合纂版按用户要求拆分而成，合纂版存档于 docs/drafts/DESIGN-合纂版-已拆分存档.md）经用户审阅通过、且用户批准本依赖表之前，**禁止执行任何 `pnpm install` / `pnpm add`**；此后每次依赖变化（新增/删除/升级/换用途）必须**先更新本文件并获同步确认，再动 package.json**。
+> **硬性流程（九.1 L128 + 十.3 L147）**：下表当前全部为**「计划引入·未安装」**状态——实现文档（docs/00–09 十册分册，2026-11-08 由单一 DESIGN.md 合纂版按用户要求拆分而成，合纂版存档于 docs/drafts/DESIGN-合纂版-已拆分存档.md）经用户审阅通过、且用户批准本依赖表之前，**禁止执行任何 `pnpm install` / `pnpm add`**；此后每次依赖变化（新增/删除/升级/换用途）必须**先更新本文件并获同步确认，再动 package.json**。（**更新**：该批准已于 2026-11-08 获得——用户审阅通过并按推荐批准本依赖表；实际安装随 T01 于实现阶段执行。）
 > **体积口径**：标注「预计」的数值为设计估算（来源注明），实装后以 §4 的实测命令结果替换并填入「实测」列；行号 L120 = 原文第八节第 1 点。
 
 ---
@@ -16,7 +16,7 @@
 | 既有 npm 全局包（**7 项·既有·非本项目引入**） | @vue/cli@5.0.8、cnpm@8.4.0、json-server@1.0.0-alpha.19、miniprogram-to-uniapp@2.0.24、pnpm@12.3.4、slidev-theme-penguin@1.6.1、typescript@5.0.2 | `npm ls -g --depth=0`（2026-11-08 实测） | `C:\Users\Tom\AppData\Roaming\npm\`；pnpm 侧全局为空（`pnpm ls -g` → No global packages found）——npm 与 pnpm 全局目录不同，清单须分别采集 |
 | pnpm store（虚拟仓库根） | `E:\_Dev\node\pnpm-store\v11` | `pnpm store path` | 当前占用 **1.9 GB**——为既有全局共享内容，**非本项目引入**；本项目安装后增量见 §4 |
 | 项目本地 node_modules | 尚不存在（未搭建工程） | — | — |
-| 项目内 git 仓库 | **已初始化**（2026-11-08 文档阶段执行；实测 2026-11-08：仅 `git init`——零提交、零远程、全部文件未跟踪。原文九.5-b 本就允许项目目录内初始化本地 git，此前本表误记「尚未初始化（九.1 门禁内）」，已更正；**请用户随审阅追认**，不追认则按九.4 红线列待清理项交用户处理，不递归删除 .git） | `git rev-parse --is-inside-work-tree`、`git log --oneline --all`、`git remote -v`、`git status --short` | `mini-camp-diorama/.git`（HEAD/config 时间戳 2026-11-08 14:45） |
+| 项目内 git 仓库 | **已初始化**（2026-11-08 文档阶段执行；实测 2026-11-08：仅 `git init`——零提交、零远程、全部文件未跟踪。原文九.5-b 本就允许项目目录内初始化本地 git，此前本表误记「尚未初始化（九.1 门禁内）」，已更正；**已追认（2026-11-08 用户审阅通过，维持本地仓库，不做任何删除）**） | `git rev-parse --is-inside-work-tree`、`git log --oneline --all`、`git remote -v`、`git status --short` | `mini-camp-diorama/.git`（HEAD/config 时间戳 2026-11-08 14:45） |
 
 > 结论：写入系统仓库的既有全局包共 **7 项**（全部 npm 侧，上表所列，**均既有·非本项目引入**）；pnpm 全局为空；本项目**不计划新增任何全局安装**（全部依赖进项目内，经 pnpm store 硬链接）。全局 typescript@5.0.2 的存在对本项目 §2.2 的 devDependency `typescript` 仅有版本参考意义，项目内仍独立安装锁定版本。（修订 2026-11-08：原结论「只有既有的 node/pnpm/npm 本体」系仅采集了 pnpm 侧清单所致，已按 `npm ls -g --depth=0` 实测更正。）
 
@@ -88,6 +88,7 @@
 | 日期 | 变更 | 版本 | 触发任务 | 审批依据 | 体积影响 |
 |---|---|---|---|---|---|
 | 2026-11-08 | 建档：登记 4 项计划依赖（three/vite/typescript/@types/three）+ 1 项备选（vite-plugin-singlefile），全部未安装 | — | 文档阶段 | 九.1 门禁中（待用户批准） | 无（未安装） |
+| 2026-11-08 | 回写：用户审阅通过全部文档并按推荐批准依赖表（three / vite / typescript / @types/three 维持计划引入；vite-plugin-singlefile 维持备选默认不引入）；仍未安装 | — | 文档阶段→实现前 | 已批准（安装随 T01 于下一会话执行） | 无（未安装） |
 | — | — | — | — | — | — |
 
 ---
