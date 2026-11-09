@@ -182,6 +182,7 @@ function patchSharedWeather(material: THREE.Material, spec: SurfacePatchSpec): v
       if (snowMode !== null) fragDecls.push('uniform float uSnow;', 'uniform vec3 uSnowColor;');
       if (spec.lineFade) fragDecls.push('uniform float uLineFade;');
       if (snowMode === 'full') fragDecls.push(GLSL_NOISE.trim());
+      if (snowMode === 'full' && lit) fragDecls.push('uniform float uWindPhase;'); // ②b 雪面闪点相位
       if (needsWorldPos) {
         vertDecls.push('varying vec3 vWmWorldPos;');
         fragDecls.push('varying vec3 vWmWorldPos;');
@@ -237,6 +238,27 @@ function patchSharedWeather(material: THREE.Material, spec: SurfacePatchSpec): v
         f = patchedF;
       }
 
+      // ②b 五-5 地面薄雪：fresnel 闪点 ×snowCover×0.3（raw 材质分支；工厂分支在
+      // toonMaterial.applyToonPatches 同公式）。lit 材质才有 normal/vViewPosition（basic 降级
+      // 路径无该变量，不注入）；vWmWorldPos/WMHash 已由 snow==='full' 分支声明。
+      if (snowMode === 'full' && lit) {
+        const modsB2 = [
+          '{',
+          '\tfloat wmGlintNV = clamp( dot( normal, normalize( vViewPosition ) ), 0.0, 1.0 );',
+          '\tfloat wmGlintFres = pow( 1.0 - wmGlintNV, 4.0 );',
+          '\tvec2 wmGlintCell = floor( vWmWorldPos.xz * 18.0 );',
+          '\tfloat wmGlintRand = wmHash( wmGlintCell );',
+          '\tvec2 wmGlintIn = fract( vWmWorldPos.xz * 18.0 ) - 0.5;',
+          '\tfloat wmGlintDot = smoothstep( 0.26, 0.05, length( wmGlintIn ) );',
+          '\tfloat wmGlintTw = 0.55 + 0.45 * sin( uWindPhase * 2.7 + wmGlintRand * 6.2831 );',
+          '\ttotalEmissiveRadiance += uSnowColor * ( wmGlintFres * wmGlintTw * wmGlintDot * step( 0.78, wmGlintRand ) * clamp( uSnow, 0.0, 1.0 ) * 0.3 );',
+          '}',
+        ].join('\n');
+        const patchedF2 = replaceFirst(f, ANCHOR_NORMAL, `${ANCHOR_NORMAL}\n${modsB2}`);
+        if (patchedF2 === null) throw new Error('normal_fragment_maps 锚点失配（雪面闪点）');
+        f = patchedF2;
+      }
+
       // ③ 末层：uLineFade 划线 alpha（五-5：opacity=1−0.85×lineFade，以 alpha 乘子等效）
       if (spec.lineFade) {
         const patchedF = replaceFirst(
@@ -255,6 +277,7 @@ function patchSharedWeather(material: THREE.Material, spec: SurfacePatchSpec): v
         uniforms.uSnow = sharedUniforms.uSnow;
         uniforms.uSnowColor = { value: new THREE.Color(SNOW_COLOR_HEX) };
       }
+      if (snowMode === 'full' && lit) uniforms.uWindPhase = sharedUniforms.uWindPhase;
       if (spec.lineFade) uniforms.uLineFade = sharedUniforms.uLineFade;
 
       shader.fragmentShader = f;
@@ -286,7 +309,10 @@ function patchShellExtrude(material: THREE.Material): THREE.IUniform<number> {
       return;
     }
     shader.uniforms.uSnowShellExtrude = uni;
-    shader.vertexShader = patched;
+    // T44 修复：使用处补 uniform 声明（此前只插表达式 → 雪壳可见时
+    // `'uSnowShellExtrude' : undeclared identifier` 编译失败、雪壳该帧渲染失败）。
+    // 回调每次编译都从 three 全新模板重推导（无累积），顶部声明幂等安全。
+    shader.vertexShader = `uniform float uSnowShellExtrude;\n${patched}`;
   });
   if (!material.transparent) {
     material.transparent = true; // opacity=min(1,2×snowCover) 动画前提；注册期一次重编译
@@ -481,6 +507,14 @@ export class WeatherMaterialSystem implements TimeChannelSink {
     this.registeredMaterials.clear();
     this.registeredLamps.clear();
     this.shells.length = 0;
+    // 打磨轮次1：反光条 mesh 为本系统自建（registerReflectionLamps 逐灯新建），须随记录一并摘除
+    // 并释放——原实现只清 records，mesh 滞留 stripsGroup：材质 opacity 冻结在卸载瞬值，容器一旦
+    // 重新 attach 即以旧灯位鬼影重现，且每次场景切换泄漏 mesh/geometry/material。
+    for (const strip of this.strips) {
+      strip.mesh.geometry.dispose();
+      strip.material.dispose();
+    }
+    this.stripsGroup.clear();
     this.strips.length = 0;
   }
 

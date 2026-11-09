@@ -327,6 +327,16 @@ export class TimeLightSystem {
     return this.applyParams(preset.lighting, preset.channels, blend);
   }
 
+  /**
+   * 时间维 id 回注（T31 接线修复：Director 走 applyLightingNow→applyParams 插值路径，不经
+   * applyPreset——此前 currentTimeId 停留在初始默认，SceneLightState.time 恒为默认档，
+   * 场景离散量（餐具/送货小车 blend≥0.5 门控读 state.time）在真实切换链上永不触发。
+   * Director 在时间切换/装配两处随预设 id 调用本口。）
+   */
+  setTimeId(id: TimeId): void {
+    this.currentTimeId = id;
+  }
+
   /** 六通道下发（§3.5.3 路径逐字：场景钩子 + 车型钩子 + 附加消费方）。 */
   dispatch(state: SceneLightState, blend: number): void {
     const b = clamp(blend, 0, 1);

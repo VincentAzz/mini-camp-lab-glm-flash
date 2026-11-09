@@ -253,7 +253,11 @@ export function applyVegetationWindPatch(
 export function injectVegetationWind<T extends THREE.Material>(material: T, options: VegetationWindOptions = {}): T {
   const data = material.userData as Record<string, unknown>;
   if (data.vegWindInjected) {
-    throw new Error(`[wind] 植被风摆重复注入：${material.name || material.type}`);
+    // 幂等早退（场景重入修复）：ToonMaterialFactory.get 同参数命中缓存返回同一实例（§3.7 #3），
+    // 该缓存跨场景卸载存活 → 场景重入构建（FadeSwap buildProps）必然再次走到这里。首次注入已把
+    // 风摆链入 onBeforeCompile（prev → applyVegetationWindPatch），二次包裹会重复声明 uniform
+    // 并二倍位移——直接复用既有注入；风摆参数不含在工厂缓存键中，同键重入时 options 恒与首次同值。
+    return material;
   }
   data.vegWindInjected = true;
   const prev = material.onBeforeCompile.bind(material);

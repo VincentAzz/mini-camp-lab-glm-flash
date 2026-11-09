@@ -391,10 +391,16 @@ function cloneForFade(source: THREE.Material): FadeBinding {
     const anchor = '#include <colorspace_fragment>';
     if (clone.fragmentShader.includes(anchor)) {
       clone.uniforms.uFade = { value: 1 };
-      clone.fragmentShader = clone.fragmentShader.replace(
+      const patched = clone.fragmentShader.replace(
         anchor,
         'gl_FragColor.a *= uFade;\n#include <colorspace_fragment>',
       );
+      // T44 修复：uFade 须在片元着色器声明——此前只插表达式不插声明，克隆体一渲染即
+      // `'uFade' : undeclared identifier` 编译失败刷屏、该材质该帧渲染失败（反壳/水面/云影）。
+      // 顶部声明（声明先于使用）；已有同名声明的 shader 防御性跳过，避免重复声明。
+      clone.fragmentShader = patched.includes('uniform float uFade')
+        ? patched
+        : `uniform float uFade;\n${patched}`;
       clone.needsUpdate = true;
     } else {
       supportsOpacity = false; // 锚点失配：走 mesh.visible 兜底（降级不穿帮）
@@ -486,13 +492,19 @@ export interface FadeSwapDelegate {
   unloadOld(oldRoot: THREE.Object3D): void;
   /** 淡入开始前（旧组已移除、新组材质已克隆 opacity=0）：立即按当前 time/weather 呈现 blend=1。 */
   beforeFadeIn(newRoot: THREE.Object3D): void;
+  /**
+   * 崩溃兜底（可选）：unloadOld/beforeFadeIn throw 时半成品新根已挂 scene 图且 visible=false，
+   * 委托方须回收其资源并摘出场景图（孤儿根泄漏防护）；错误由时间线继续上抛，此处不吞。
+   */
+  discardNewRoot?(newRoot: THREE.Object3D): void;
 }
 
 /**
  * 600ms FadeSwap 状态机（场景与车型共用）：
  *   t=0–300 旧组克隆材质 opacity 1→0（easeInQuad），t≥150 起分帧构建（每帧 1 stage，≤3）；
- *   t≥300（且新根就绪）旧组移除+卸载+克隆 dispose；新组克隆材质 opacity 0→1（easeOutCubic）
- *   + scale 0.96→1.0 + y +0.35→0（「换展品」落定感）；t=600 还原原生材质恢复 castShadow。
+ *   t≥300 且「全部分帧 stage 完成」（且新根就绪）才旧组移除+卸载+克隆 dispose；新组克隆材质
+ *   opacity 0→1（easeOutCubic）+ scale 0.96→1.0 + y +0.35→0（「换展品」落定感）；
+ *   t=600 还原原生材质恢复 castShadow。激活/卸载 throw 时回收半成品新根并如实上抛。
  * 相机全程不触碰（docs/06 §6.6「相机连续性」）。
  */
 export class FadeSwapRunner {
@@ -548,17 +560,40 @@ export class FadeSwapRunner {
       const outP = clamp(this.elapsedMs / FADE_OUT_MS, 0, 1);
       this.oldFade?.setOpacity(1 - easeInQuad(outP));
 
-      // t≥300 且新根已产出才卸载（极端卡顿下宁可延长等待，也不卸载后无内容可切）
-      if (this.elapsedMs >= FADE_OUT_MS && this.newRoot !== null) {
-        this.delegate.unloadOld(this.oldRoot);
-        this.oldFade?.dispose();
-        this.oldFade = null;
-        this.oldRoot = null;
-
+      // Q7 修复：t≥300 且「全部分帧 stage 已完成」且新根已产出，才卸载+激活。
+      // 低帧率环境（dt 被 MAX_FRAME_DT=0.1 钳制）300ms 引擎时间只需 3-4 帧，而构建每帧至多
+      // 1 stage——旧闸只看 newRoot（stage 0 即产出），≤13fps 时 t=300 处 stage 2（scheduler/
+      // 动效注册）尚未构建，Director.activateScene 的装配完整性守卫必然 throw → 新根永久
+      // invisible（FadeSwap 卡死）。极端卡顿下宁可延长等待（旧组保持 opacity 0），也不在
+      // 装配未完成时卸载/激活。
+      if (
+        this.elapsedMs >= FADE_OUT_MS &&
+        this.builtStages >= this.maxStages &&
+        this.newRoot !== null
+      ) {
         const target = this.newRoot;
-        this.newFade = createFadeSet(target);
-        this.newFade.setOpacity(0);
-        this.delegate.beforeFadeIn(target);
+        try {
+          this.delegate.unloadOld(this.oldRoot);
+          this.oldFade?.dispose();
+          this.oldFade = null;
+          this.oldRoot = null;
+
+          this.newFade = createFadeSet(target);
+          this.newFade.setOpacity(0);
+          this.delegate.beforeFadeIn(target);
+        } catch (error) {
+          // 崩溃兜底（孤儿根泄漏修复）：旧根已进入卸载流程、半成品新根仍挂 scene 图且
+          // visible=false——丢弃克隆材质并交 delegate 回收（资源释放+摘出场景图），错误如实
+          // 上抛不吞。过渡作废：oldRoot/newFade 清零，runner 不再挂起（update 后续返回 true）。
+          this.oldFade?.dispose();
+          this.oldFade = null;
+          this.oldRoot = null;
+          this.newFade?.dispose();
+          this.newFade = null;
+          this.newRoot = null;
+          this.delegate.discardNewRoot?.(target);
+          throw error;
+        }
         target.visible = true;
         target.scale.setScalar(FADESWAP_IN_SCALE_FROM);
         target.position.y = FADESWAP_IN_LIFT_Y;

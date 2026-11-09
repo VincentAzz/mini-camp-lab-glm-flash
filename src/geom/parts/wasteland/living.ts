@@ -128,6 +128,12 @@ export function createBarrelGrill(assets: SharedAssets, id: string): BarrelGrill
   sparkAnchor.position.y = 0.62;
   group.add(sparkAnchor);
 
+  // P3 火光点光挂点（docs/01 §3.9「避难所火堆」；T31②：Director 按此申报领取 fireSlot）
+  const fireLightAnchor = new THREE.Object3D();
+  fireLightAnchor.name = `${id}/fire-light-anchor`;
+  fireLightAnchor.position.y = 0.4;
+  group.add(fireLightAnchor);
+
   return { group, coalMaterial, sparkAnchor };
 }
 

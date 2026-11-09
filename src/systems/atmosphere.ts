@@ -206,10 +206,16 @@ export class AtmosphereSystem {
     this.density = (FOG_DENSITY_BASE + Math.pow(fog01, FOG_EXP) * FOG_DENSITY_GAIN) * wobble;
     // ③ 雾色 = mix(时间天空 horizon, #8A94A8, 0.5×cloudiness)（§4.4.2 浓雾行逐字）
     this.fogColor.copy(this.horizon).lerp(this.fogGray, 0.5 * this.cloudiness);
-    // ④ 天空向雾色压缩（五-4 景深压缩的天空侧：0.35×fog01 连续生效）
-    const compress = SKY_COMPRESS_MAX * fog01;
-    this.compressedZenith.copy(this.zenith).lerp(this.fogColor, compress);
-    this.compressedHorizon.copy(this.horizon).lerp(this.fogColor, compress);
+    // ④ 天空端点压缩（T45 修复⑤，两规格行先后生效）：
+    //   a) 五-4 浓雾景深压缩：zenith/horizon 向雾色 lerp 0.35×fog01（fog01≈1 时恰为 35%）；
+    //   b) §4.4.4 公式行 sky = time.sky 向天气灰调 lerp(0.5×cloudiness)——雨 0.5×0.7=35% 逐字。
+    //   原实现只有 a) 且无消费方：雨 fog01≈0.2 → 灰移≈2.7%，晴/雨天空实测零变化。
+    //   注：多云档 §4.4.4 公式给 0.5×cloudiness=50%，与五-2 行「lerp 25%」存在文档内口径冲突，
+    //   此处按「公式块=合成规则权威」取 §4.4.4；五-2 的 25% 如需回调改本行系数即可。
+    const compressFog = SKY_COMPRESS_MAX * fog01;
+    const compressGray = 0.5 * this.cloudiness;
+    this.compressedZenith.copy(this.zenith).lerp(this.fogColor, compressFog).lerp(this.fogGray, compressGray);
+    this.compressedHorizon.copy(this.horizon).lerp(this.fogColor, compressFog).lerp(this.fogGray, compressGray);
 
     // ⑤ 写入场景雾（未 attach 时仅更新缓存，getters 依旧可用）
     if (this.scene) {

@@ -24,6 +24,9 @@
 //   契约实现缺 bindChannel 时降级为 applyLighting 内 setLampPower 逐档覆盖（结构化可选口，同 T18 口径）。
 // 无人物红线（一.6）：全场景无人形几何——餐饮窗内仅桌椅剪影（alpha 贴图）、售货机货道为商品盒几何、
 //   残骸/人物均无；送货小车为无人推车。
+// T31（2026-11-09）：补 J4 四场景就餐面「服务区长椅」档早餐餐具（盘×2+杯×2+壶，dawn 离散+0.2s 淡变，
+//   §4.3.3-③；与送货小车共用 lastDiscreteKey 单键门控）——四场景就餐面至此齐备（海崖桌/松林凳面/
+//   避难所板条箱面/服务区长椅）。
 import * as THREE from 'three';
 import type {
   SceneAnimation,
@@ -45,7 +48,7 @@ import type {
   WeatherSurface,
 } from '@/systems/handles';
 import { toonMaterials } from '@/render/toonMaterial';
-import { mergeGeometries, hardenEdges } from '@/geom/primitives';
+import { mergeGeometries, hardenEdges, lathe } from '@/geom/primitives';
 import { InstancedGroup } from '@/geom/instanced';
 import { injectVegetationWind } from '@/systems/wind';
 import { SCHEDULED_EVENT_PRESETS } from '@/systems/scheduler';
@@ -132,6 +135,10 @@ interface ServiceareaState {
   cartVisible: boolean;
   cartFaded: boolean;
   cartFade: number;
+  /** 早餐餐具离散量（J4 服务区长椅档，dawn 出现/其余收走；同 D5 口径，§4.3.3-③） */
+  tablewareVisible: boolean;
+  tablewareFaded: boolean;
+  tablewareFade: number;
   lastKey: string | null;
   pendingKey: string | null;
 }
@@ -441,6 +448,8 @@ interface PropRefs {
   vendingHalos: THREE.Sprite[];
   deliveryCart: THREE.Group | null;
   cartFadeMaterials: readonly THREE.MeshToonMaterial[];
+  tablewareSet: THREE.Group;
+  tablewareFadeMats: THREE.MeshToonMaterial[];
   canopyRoofTopY: number;
 }
 
@@ -479,6 +488,93 @@ function makeHaloSprite(assets: SceneBuildContext['assets'], key: string, scale:
 
 function makeSnowShellMaterial(name: string): THREE.Material {
   return toonMaterials.get('matteProp', { color: '#edf2f9', snow: 'off', opacity: 0.999, name });
+}
+
+/* ============================== 早餐餐具（J4 长椅档；Lathe 盘/杯/壶，docs/05 §4.3.3-③） ============================== */
+
+/**
+ * 服务区长椅档早餐餐具：盘 ×2+杯 ×2+壶（J4 全套四件式；海崖主展示同套型）。
+ * 三场景既有实现各自内联（R-P3-1⑥：tableware.ts 因文件白名单未拆、内联于场景文件）——
+ * 本件按同一模式落 servicearea 档；材质以独立 name 取用（工厂缓存键含 name），
+ * 淡入淡出改 opacity 不影响共享材质。
+ */
+function buildBreakfastSet(assets: SceneBuildContext['assets']): THREE.Group {
+  const group = new THREE.Group();
+  group.name = 'servicearea/breakfast-inner';
+  const uniqueMat = (color: string, name: string): THREE.MeshToonMaterial =>
+    toonMaterials.getToon('matteProp', { color, opacity: 0.999, name }); // opacity<1 → transparent 开（0.2s 淡变）
+  const plateMat = uniqueMat('#f5f2ea', 'servicearea/breakfast-plate');
+  const cupMat = uniqueMat('#6a8aa8', 'servicearea/breakfast-cup');
+  const potMat = uniqueMat('#e8e2d4', 'servicearea/breakfast-pot');
+
+  const plateGeometry = assets.geometry('servicearea/breakfast-plate', () =>
+    lathe({
+      profile: [
+        [0.0, 0.012],
+        [0.1, 0.006],
+        [0.16, 0.03],
+        [0.19, 0.032],
+      ],
+      segments: 14,
+    }),
+  );
+  for (const [px, pz] of [
+    [-0.26, 0.09],
+    [0.08, 0.14],
+  ] as const) {
+    const plate = new THREE.Mesh(plateGeometry, plateMat);
+    plate.name = 'servicearea/breakfast-plate';
+    plate.position.set(px, 0, pz);
+    group.add(plate);
+  }
+  const cupGeometry = assets.geometry('servicearea/breakfast-cup', () =>
+    lathe({
+      profile: [
+        [0.0, 0.0],
+        [0.045, 0.0],
+        [0.052, 0.085],
+        [0.048, 0.09],
+      ],
+      segments: 12,
+    }),
+  );
+  for (const [cx, cz] of [
+    [0.0, -0.12],
+    [0.3, 0.02],
+  ] as const) {
+    const cup = new THREE.Mesh(cupGeometry, cupMat);
+    cup.name = 'servicearea/breakfast-cup';
+    cup.position.set(cx, 0.01, cz);
+    group.add(cup);
+  }
+  const potGeometry = assets.geometry('servicearea/breakfast-pot', () =>
+    lathe({
+      profile: [
+        [0.0, 0.02],
+        [0.09, 0.0],
+        [0.12, 0.06],
+        [0.13, 0.16],
+        [0.115, 0.2],
+        [0.05, 0.21],
+      ],
+      segments: 14,
+    }),
+  );
+  const pot = new THREE.Mesh(potGeometry, potMat);
+  pot.name = 'servicearea/breakfast-pot';
+  pot.position.set(0.24, 0, -0.1);
+  group.add(pot);
+  return group;
+}
+
+/** 淡入淡出材质收集（0.2s opacity 渐变取用点；同 wasteland.ts 同名函数口径）。 */
+function collectMeshMaterials(root: THREE.Object3D): THREE.MeshToonMaterial[] {
+  const found: THREE.MeshToonMaterial[] = [];
+  root.traverse((obj) => {
+    const mesh = obj as THREE.Mesh;
+    if (mesh.isMesh && mesh.material instanceof THREE.MeshToonMaterial) found.push(mesh.material);
+  });
+  return found;
 }
 
 function buildProps(ctx: SceneBuildContext): SceneProps {
@@ -689,6 +785,19 @@ function buildProps(ctx: SceneBuildContext): SceneProps {
     bin.rotation.y = rng.range(0, Math.PI * 2);
     group.add(bin);
   }
+
+  /* — +早餐餐具（J4 四场景就餐面「服务区长椅」档，docs/00 一.12 J4；Lathe 盘×2+杯×2+壶，
+       仅 dawn 出现=离散量 D5——blend≥0.5 切换+0.2s opacity 淡变，§4.3.3-③；不入 named
+       以保持 2.4.2 注册表三键口径）— */
+  const tablewareSet = buildBreakfastSet(assets);
+  tablewareSet.name = 'servicearea/breakfast-set';
+  tablewareSet.position.set(2.6, 0.44, 6.55); // 东侧长椅座面（座板顶 ≈0.4375，benchSlat.ts:41-42）
+  tablewareSet.rotation.y = -0.08;
+  tablewareSet.scale.setScalar(0.9); // 长椅座深 0.54u——原木凳面档同款缩放（pineforest 口径）
+  tablewareSet.visible = false;
+  group.add(tablewareSet);
+  propsRef.tablewareSet = tablewareSet;
+  propsRef.tablewareFadeMats = collectMeshMaterials(tablewareSet);
 
   /* — ⑪ 洗手池（台+盆+弯管龙头+镜背板；食堂段东侧墙边）— */
   const washBasin = createWashBasin({ assets, id: 'washBasin/servicearea' });
@@ -1055,6 +1164,9 @@ const sceneState: ServiceareaState = {
   cartVisible: false,
   cartFaded: true,
   cartFade: 0,
+  tablewareVisible: false,
+  tablewareFaded: true,
+  tablewareFade: 0,
   lastKey: 'dusk',
   pendingKey: null,
 };
@@ -1092,7 +1204,7 @@ const lightHooks: SceneLightHooks = {
     sceneState.visibility = THREE.MathUtils.lerp(sceneState.visibilityFrom, sceneState.visibilityTo, eased);
     sceneState.headlightStretch = THREE.MathUtils.lerp(sceneState.headlightStretchFrom, sceneState.headlightStretchTo, eased);
 
-    // —— 离散量：送货小车（dawn 出现/其余收走；blend≥0.5 切换+0.2s opacity 淡变，§4.3.1/D5）——
+    // —— 离散量：送货小车+早餐餐具（dawn 出现/其余收走；blend≥0.5 切换+0.2s opacity 淡变，§4.3.1/D5）——
     if (sceneState.pendingKey !== null && b >= 0.5) {
       const targetVisible = sceneState.pendingKey === 'dawn';
       if (targetVisible && !sceneState.cartVisible) {
@@ -1100,6 +1212,12 @@ const lightHooks: SceneLightHooks = {
         sceneState.cartFaded = false;
       } else if (!targetVisible && sceneState.cartVisible) {
         sceneState.cartFaded = true; // update 内 0.2s 淡出后隐藏
+      }
+      if (targetVisible && !sceneState.tablewareVisible) {
+        sceneState.tablewareVisible = true;
+        sceneState.tablewareFaded = false;
+      } else if (!targetVisible && sceneState.tablewareVisible) {
+        sceneState.tablewareFaded = true; // update 内 0.2s 淡出后隐藏
       }
       sceneState.pendingKey = null;
     }
@@ -1168,7 +1286,7 @@ const lightHooks: SceneLightHooks = {
       halo.visible = material.opacity >= 0.02;
     }
 
-    // —— 送货小车 0.2s 淡入淡出（切换用 opacity 渐变不用 scale 弹跳，§4.3.1）——
+    // —— 送货小车/早餐餐具 0.2s 淡入淡出（切换用 opacity 渐变不用 scale 弹跳，§4.3.1）——
     const cart = propsRef.deliveryCart;
     if (cart) {
       const targetOpacity = sceneState.cartVisible && !sceneState.cartFaded ? 1 : 0;
@@ -1182,6 +1300,21 @@ const lightHooks: SceneLightHooks = {
       for (const material of propsRef.cartFadeMaterials ?? []) {
         material.opacity = 0.999 * sceneState.cartFade;
         material.visible = sceneState.cartFade > 0.02;
+      }
+    }
+    const tableware = propsRef.tablewareSet;
+    if (tableware) {
+      const targetOpacity = sceneState.tablewareVisible && !sceneState.tablewareFaded ? 1 : 0;
+      if (targetOpacity > sceneState.tablewareFade) {
+        sceneState.tablewareFade = Math.min(1, sceneState.tablewareFade + dt / 0.2);
+      } else if (targetOpacity < sceneState.tablewareFade) {
+        sceneState.tablewareFade = Math.max(0, sceneState.tablewareFade - dt / 0.2);
+        if (sceneState.tablewareFade <= 0) sceneState.tablewareVisible = false;
+      }
+      tableware.visible = sceneState.tablewareFade > 0.02;
+      for (const material of propsRef.tablewareFadeMats ?? []) {
+        material.opacity = 0.999 * sceneState.tablewareFade;
+        material.visible = sceneState.tablewareFade > 0.02;
       }
     }
   },

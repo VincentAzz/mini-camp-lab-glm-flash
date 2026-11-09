@@ -1578,6 +1578,7 @@ function createSeagullAnimation(runtime: SceneRuntime, state: SeacliffState): Sc
   const handle = scheduler.add({
     meanIntervalS: 16, // docs/05 §7.1.5-1
     jitterS: 6,
+    nightSilent: true, // §7.1.5-1「夜间归巢」：Director 夜间静默下倒计时冻结（scheduler.ts 预置档同口径）
     fire(): void {
       if (state.time === 'night') return; // 夜间归巢
       const count = 1 + Math.floor(rng.next() * 3);

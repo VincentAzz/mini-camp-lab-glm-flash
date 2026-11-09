@@ -221,6 +221,12 @@ export interface ScheduledEvent {
   readonly minIntervalS?: number;
   /** 触发概率 0..1（默认 1） */
   readonly probability?: number;
+  /**
+   * 夜间静默标记（打磨轮次1补记契约：docs/05 §7.1.5-1/2「夜间归巢」——海鸟/松鼠 true）。
+   * EventScheduler 实现按本字段鸭子类型读取（scheduler.ts NightSilentScheduledEvent 同形）；
+   * Director 经 setNightSilence 驱动夜间冻结，其余事件（纸巾/光斑/双闪）不带此标记。
+   */
+  readonly nightSilent?: boolean;
   /** 触发回调（海鸟掠过/松鼠窜过/纸巾轻掀/光斑鸟鸣/招牌双闪） */
   fire(): void;
 }

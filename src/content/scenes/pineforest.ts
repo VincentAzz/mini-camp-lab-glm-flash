@@ -680,6 +680,22 @@ function buildProps(ctx: SceneBuildContext): SceneProps {
 
   // 锚树 ×2（tier M 单体：干/冠 Mesh 各 1，供鸟屋/吊床/晾绳挂靠）
   const anchorTierGeo = createPineTierGeometries(assets, 'm');
+  // 打磨轮次1修复：锚树冠此前直接复用 tier-m 实例冠材质（pineforest/canopy-m，基色白、靠
+  // instanceColor 上绿）——单体 Mesh 无 instanceColor，全时段恒显纯白与松林冲突。改用同档配色
+  // 专材（canopyDark = tier-m 档配色，canopyColors[1] 同源），并登记进 canopyMaterials/
+  // canopyBaseColors，与实例冠同走「树冠剪影 canopyTint」逐帧驱动（update 侧 forEach 追加项）。
+  const anchorCanopyMat = toonMaterials.get('foliage', {
+    color: CHANNELS.canopyDark,
+    name: 'pineforest/canopy-anchor',
+  });
+  injectVegetationWind(anchorCanopyMat, {
+    ampU: 0.06, // 与 tier-m 同参（7-2-① 顶摆幅 0.06u / 0.8Hz）
+    freqHz: 0.8,
+    heightU: anchorTierGeo.canopyTopY,
+    phase: 0.7, // tierIndex 1 × 0.7，与 m 档同相
+  });
+  canopyMaterials.push(anchorCanopyMat as THREE.MeshToonMaterial);
+  canopyBaseColors.push(new THREE.Color(CHANNELS.canopyDark));
   const anchorDefs: readonly { pos: THREE.Vector3; rotY: number }[] = [
     { pos: ANCHOR_A, rotY: 0.7 },
     { pos: ANCHOR_B, rotY: 2.1 },
@@ -690,7 +706,7 @@ function buildProps(ctx: SceneBuildContext): SceneProps {
     trunk.position.copy(def.pos);
     trunk.rotation.y = def.rotY;
     trunk.castShadow = true;
-    const canopy = new THREE.Mesh(anchorTierGeo.canopy, canopyMaterials[1]!);
+    const canopy = new THREE.Mesh(anchorTierGeo.canopy, anchorCanopyMat);
     canopy.name = `pineforest/anchor-canopy-${i}`;
     canopy.position.copy(def.pos);
     canopy.rotation.y = def.rotY;
@@ -1498,6 +1514,7 @@ function createSquirrelAnimation(runtime: SceneRuntime, state: PineforestState):
   const handle = scheduler.add({
     meanIntervalS: 26, // docs/05 §7.1.5-2
     jitterS: 10,
+    nightSilent: true, // §7.1.5-2「夜间归巢」：Director 夜间静默下倒计时冻结（scheduler.ts 预置档同口径）
     fire(): void {
       if (state.time === 'night') return; // 仅 dawn/day/dusk
       // 地面样条：营位东侧林地 2~3m 一段

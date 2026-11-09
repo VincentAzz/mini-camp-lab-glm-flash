@@ -36,8 +36,14 @@ import type {
 /** 发射器索引上限（uEmitterFade uniform 数组宽度）：天气 ≤2 + 场景 ≤8 + 余量（docs/01 §3.4-3）。 */
 export const MAX_EMITTERS = 32;
 
-/** 每混合池槽位容量：过渡期双集合并存存活峰值 ×2 仍在预算内（docs/05 §4.4.3；雨 240+雪 792 双组 ≈1272）。 */
-export const POOL_CAPACITY = 2048;
+/**
+ * 每混合池槽位容量（实机修复：交叉淡化双雪集合并存 + 长会话碎片化下 2048 不够）：
+ * 交叉淡化 0.5s 内新旧天气集合共存（雪 want=ceil(180×4.4)≈793，×2 共存 ≈1586）+ 场景发射器
+ * （每场景 ≤50）+ 多轮场景/天气切换后空闲段碎片余量。2048 时实测「申请 793 槽实得 396」
+ * 发射密度降级（console.warn）；4096 ≈ 共存峰值 ×2.5 头寸，每池属性缓冲仅增 ~360KB。
+ * （docs/05 §4.4.3 定值只约束交叉淡化行为，不约束池容量。）
+ */
+export const POOL_CAPACITY = 4096;
 
 /** 单发射器槽位上限（防单发射器独占池）。 */
 const MAX_SLOTS_PER_EMITTER = 1024;
@@ -243,7 +249,15 @@ void main() {
   float alpha = aColor.a * env * groupFade;
   if (kind > 7.5) alpha *= (1.0 - ageT) * (1.0 - ageT);
   vColor = vec4(aColor.rgb, alpha);
-  vUv = aUvSel + uv * vec2(0.33333334, 0.5);
+  // T33 不可见修复④：拉伸类（雨/滴水）quad 宽度亚像素（0.008m），水平方向映射整个图集单元
+  // 会把径向点精灵的中心强度沿宽度平均掉（tex.a 有效值≈0.57→叠加后雨丝低于可见阈值）。
+  // 改取单元中心 1/8 窄列：亚像素宽度本就不可呈现水平剖面，窄列保住 sprite 竖向形状与强度；
+  // 非拉伸类（雪/雾团/火星/叶/涟漪环）仍取整单元。
+  if (stretch) {
+    vUv = vec2(aUvSel.x + (0.5 + (uv.x - 0.5) * 0.125) * 0.33333334, aUvSel.y + uv.y * 0.5);
+  } else {
+    vUv = aUvSel + uv * vec2(0.33333334, 0.5);
+  }
 
   // —— 死亡/未发射槽位剔除（槽位循环回收的 GPU 侧终点）——
   if (alive < 0.5) {
@@ -253,7 +267,7 @@ void main() {
 }
 `;
 
-/** 片元着色器：图集 alpha 形状 × 槽位色 × 槽位 α。 */
+/** 片元着色器：图集 alpha 形状 × 槽位色 × 槽位 α；输出经 colorspace_fragment 编码（T33 不可见修复③）。 */
 const FRAGMENT_SHADER = /* glsl */ `
 uniform sampler2D uMap;
 varying vec2 vUv;
@@ -264,6 +278,7 @@ void main() {
   float a = tex.a * vColor.a;
   if (a < 0.004) discard;
   gl_FragColor = vec4(vColor.rgb * tex.rgb, a);
+  #include <colorspace_fragment>
 }
 `;
 
@@ -374,7 +389,8 @@ interface PoolRange {
 interface Pool {
   blending: 'additive' | 'alpha';
   geo: THREE.InstancedBufferGeometry;
-  points: THREE.Points;
+  /** 实例化 quad 的承载网格：顶点着色器做视空间 billboard 扩边，须按三角形光栅化（见 createPool 注记）。 */
+  mesh: THREE.Mesh;
   attrs: {
     pos0: THREE.InstancedBufferAttribute;
     vel: THREE.InstancedBufferAttribute;
@@ -449,6 +465,8 @@ export class ParticleSystem implements ParticleSystemContract {
   private readonly order: EmitterRecord[] = [];
   private readonly pools: Pool[] = [];
   private nextIndex = 0;
+  /** 已回收的发射器索引（dispose 后复用；发射器索引与槽位段同样循环回收，长会话不耗尽 MAX_EMITTERS）。 */
+  private readonly freeIndices: number[] = [];
   private disposed = false;
 
   constructor(clock: RhythmClock, opts: { capacity?: number } = {}) {
@@ -469,10 +487,13 @@ export class ParticleSystem implements ParticleSystemContract {
     if (spec.rate < 0) throw new RangeError(`[particles] rate 不能为负：${spec.rate}`);
     const kp = PARTICLE_KIND_PARAMS[spec.kind];
     if (!kp) throw new RangeError(`[particles] 未知 kind：${String(spec.kind)}`);
-    if (this.nextIndex >= MAX_EMITTERS) {
+    // 发射器索引：优先复用已回收索引（场景重入/天气交叉淡化常态产生 dispose）；耗尽才取新号，
+    // 上限 MAX_EMITTERS 时才拒绝注册（原实现只增不减——多轮场景切换后误触上限抛错）。
+    const reused = this.freeIndices.pop();
+    const index = reused ?? (this.nextIndex < MAX_EMITTERS ? this.nextIndex++ : -1);
+    if (index < 0) {
       throw new RangeError(`[particles] 发射器索引已满（${MAX_EMITTERS}）：先 dispose 再注册`);
     }
-    const index = this.nextIndex++;
     const pool = spec.additive ? this.pools[0]! : this.pools[1]!;
     const want = clamp(Math.ceil(spec.rate * spec.lifetime), MIN_SLOTS_PER_EMITTER, MAX_SLOTS_PER_EMITTER);
     const range = this.allocRange(pool, want);
@@ -545,6 +566,19 @@ export class ParticleSystem implements ParticleSystemContract {
     this.uniforms.uWind.value.set(x, y, z);
   }
 
+  /**
+   * 天气组发射器锚点原地重定位（场景 FadeSwap 激活路径调用；T33 修复）：
+   * 天气粒子集合跨场景持续（FadeSwap 不重挂 setWeatherSet），锚点仍指旧场景营位——场景切换后
+   * 按新场景 campAnchor 重锚。发射期取值、存量粒子不跟随（与 Object3D 锚点同一语义，见
+   * ParticleAnchor 注记）；不重注册 → 无交叉淡化抖动、无发射器索引消耗。
+   */
+  reanchorWeather(anchor: THREE.Vector3): void {
+    if (this.disposed) return;
+    for (const rec of this.order) {
+      if (rec.group === 'weather') rec.anchorPos.copy(anchor);
+    }
+  }
+
   /** 当前活跃发射器数（测试/编排用）。 */
   get emitterCount(): number {
     return this.order.length;
@@ -603,7 +637,7 @@ export class ParticleSystem implements ParticleSystemContract {
       fades[i] = this.records[i]?.fade ?? 0;
     }
     const anyEmitter = this.order.length > 0;
-    for (const pool of this.pools) pool.points.visible = anyEmitter;
+    for (const pool of this.pools) pool.mesh.visible = anyEmitter;
   }
 
   /** 系统整体回收（T17 场景卸载路径；材质/几何/图集一次性释放）。 */
@@ -613,9 +647,9 @@ export class ParticleSystem implements ParticleSystemContract {
     this.records.fill(null);
     this.order.length = 0;
     for (const pool of this.pools) {
-      this.root.remove(pool.points);
+      this.root.remove(pool.mesh);
       pool.geo.dispose();
-      (pool.points.material as THREE.Material).dispose();
+      (pool.mesh.material as THREE.Material).dispose();
     }
     this.pools.length = 0;
     this.uniforms.uMap.value?.dispose();
@@ -669,13 +703,19 @@ export class ParticleSystem implements ParticleSystemContract {
       side: THREE.DoubleSide,
       blending: blending === 'additive' ? THREE.AdditiveBlending : THREE.NormalBlending,
     });
-    const points = new THREE.Points(geo, material);
-    points.frustumCulled = false; // 全场粒子（docs/01 §3.7-7）
-    points.renderOrder = 25;
-    points.name = `particles-${blending}`;
-    points.visible = false;
-    this.root.add(points);
-    return { blending, geo, points, attrs, top: 0, free: [], warnedShrink: false };
+    // ★渲染模式（T33 不可见修复）：承载对象必须是 Mesh（TRIANGLES）而非 Points。
+    //   本几何是「1×1 quad（4 顶点+索引）× 实例」、顶点着色器在视空间扩边成 billboard 面——
+    //   若走 THREE.Points（gl.POINTS），每个角顶点只画 1px 且 quad 内部不被光栅化（片元在
+    //   图集单元角点 α≈0 直接 discard）→ 数值上一切正常而屏幕零粒子。Mesh + InstancedBufferGeometry
+    //   = drawElementsInstanced(TRIANGLES)，quad 实体面正确呈现（sky.ts 星空用 PointsMaterial 属
+    //   真点精灵，与本池无关，勿混淆）。
+    const mesh = new THREE.Mesh(geo, material);
+    mesh.frustumCulled = false; // 全场粒子（docs/01 §3.7-7）
+    mesh.renderOrder = 25;
+    mesh.name = `particles-${blending}`;
+    mesh.visible = false;
+    this.root.add(mesh);
+    return { blending, geo, mesh, attrs, top: 0, free: [], warnedShrink: false };
   }
 
   private allocRange(pool: Pool, want: number): PoolRange | null {
@@ -719,7 +759,29 @@ export class ParticleSystem implements ParticleSystemContract {
   }
 
   private freeRange(pool: Pool, range: PoolRange): void {
-    pool.free.push({ ...range });
+    const free = pool.free;
+    free.push({ ...range });
+    // 相邻空闲段归并（实机修复：池容量不足第二因）：交叉淡化反复分配/释放 793 槽大段，场景
+    // 发射器小段又穿插其间——不归并则「最大连续段」随长会话单调萎缩，allocRange 首个
+    // ≥want 探测失败后只能拿残段（申请 793 实得 396 的直接来源）。按 start 排序一次线性
+    // 归并；重叠段（防御）取并集。
+    if (free.length > 1) {
+      free.sort((a, b) => a.start - b.start);
+      let last = 0;
+      for (let i = 1; i < free.length; i++) {
+        const prev = free[last]!;
+        const cur = free[i]!;
+        const prevEnd = prev.start + prev.count;
+        const curEnd = cur.start + cur.count;
+        if (cur.start <= prevEnd) {
+          prev.count = Math.max(prevEnd, curEnd) - prev.start; // 相邻/重叠 → 并入 prev（就地扩展）
+        } else {
+          last += 1;
+          if (last !== i) free[last] = cur;
+        }
+      }
+      free.length = last + 1;
+    }
   }
 
   /** 注册期一次性写槽位静态属性（seed/size/color/meta/motion/uvSel/birth 哨兵）。 */
@@ -886,7 +948,10 @@ export class ParticleSystem implements ParticleSystemContract {
     rec.fade = 0;
     const at = this.order.indexOf(rec);
     if (at >= 0) this.order.splice(at, 1);
-    if (this.records[rec.index] === rec) this.records[rec.index] = null;
+    if (this.records[rec.index] === rec) {
+      this.records[rec.index] = null;
+      this.freeIndices.push(rec.index); // 索引回收复用（发射器池与槽位段同一循环哲学）
+    }
     this.freeRange(rec.pool, { start: rec.slotStart, count: rec.slotCount });
     if (rec.ringCount > 0) this.freeRange(rec.pool, { start: rec.ringStart, count: rec.ringCount });
   }

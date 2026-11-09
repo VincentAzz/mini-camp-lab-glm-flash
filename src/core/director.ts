@@ -18,6 +18,7 @@ import { AppStateStore, type AppState, type AppStateChangeEvent } from '@/core/s
 import type { Registry, RegistryEntry } from '@/core/registry';
 import { BaseAssembler, type BaseBuild } from '@/core/baseAssembler';
 import {
+  DISCRETE_SWITCH_BLEND,
   FadeSwapRunner,
   TimeBlendController,
   WeatherLightModBlend,
@@ -27,13 +28,14 @@ import {
 } from '@/core/transition';
 import { RhythmClock } from '@/systems/clock';
 import { WindSystem, windUniforms } from '@/systems/wind';
-import { ParticleSystem } from '@/systems/particles';
+import { ParticleSystem, type WeatherEmitterInput } from '@/systems/particles';
 import { LightBreathSystem } from '@/systems/lightBreath';
 import { TimeLightSystem, ZERO_CHANNELS, type TimeChannels } from '@/systems/timeLight';
 import { WeatherMaterialSystem } from '@/systems/weatherMaterial';
 import { AtmosphereSystem } from '@/systems/atmosphere';
 import { EventScheduler } from '@/systems/scheduler';
 import { OutlineSystem } from '@/render/outline';
+import { SkySystem, type SkyFrame } from '@/render/sky';
 import { sharedUniforms } from '@/render/toonMaterial';
 import type {
   ClothHandle,
@@ -58,6 +60,32 @@ import type { WeatherPreset } from '@/content/weathers/types';
 // ---------------------------------------------------------------------------
 // SharedAssets 契约实现（§3.4-10：同 id geometry/texture 全局共享，获取即 +1，release 归零 dispose）
 // ---------------------------------------------------------------------------
+
+/**
+ * 场景发射器语义调制绑定（T31⑥：§7.1.3 定值表逐 kind 公式——steam=2.2×smokePower+0.4、
+ * spark=6×emberPower；B6 发电机蒸汽常转 base floor（authored rate<2 视为常转基值）；
+ * dust 仅 beam>0.3（J5 白天探照灯熄→day 档置 0）；mist 按 §7.1.6 晨雾行逐档）。
+ * drip 天气门控/leaf 常率维持 authored——归 T33 天气维。
+ */
+interface EmitterBinding {
+  readonly handle: ParticleEmitterHandle;
+  readonly kind: string;
+  readonly baseRate: number;
+  /** 当前生效 rate（指数趋近目标——离散档表免跳变） */
+  rate: number;
+}
+
+/** 晨雾逐档 rate（§7.1.6 动效×时间联动矩阵「晨雾 mist」行：1.5/0.4/0.3/0.3；雾天 ×1.6 归 T33）。 */
+const MIST_TIME_RATES: Record<string, number> = { dawn: 1.5, day: 0.4, dusk: 0.3, night: 0.3 };
+
+/** P3 火光挂点发现（场景申报=name 以 `/fire-light-anchor` 结尾的首个对象；无则 null）。 */
+function findFireLightAnchor(root: THREE.Object3D): THREE.Object3D | null {
+  let found: THREE.Object3D | null = null;
+  root.traverse((obj) => {
+    if (!found && obj.name.endsWith('/fire-light-anchor')) found = obj;
+  });
+  return found;
+}
 
 type ScopeKind = 'geo' | 'tex';
 interface ScopeRecordEntry {
@@ -215,6 +243,9 @@ interface AssembledScene {
   readonly animations: readonly SceneAnimation[];
   readonly scheduler: EventScheduler;
   readonly emitterHandles: readonly ParticleEmitterHandle[];
+  readonly emitterBindings: readonly EmitterBinding[];
+  /** P3 火光点光挂点（场景申报：props 内 name 以 `/fire-light-anchor` 结尾的首个对象；无则 null） */
+  readonly fireAnchor: THREE.Object3D | null;
   readonly cloths: readonly ClothHandle[];
   readonly lamps: readonly LampHandle[];
   readonly scope: AssetScope;
@@ -242,6 +273,8 @@ interface SceneBuildSession {
   props: SceneProps | null;
   scheduler: EventScheduler | null;
   readonly emitterHandles: ParticleEmitterHandle[];
+  readonly emitterBindings: EmitterBinding[];
+  fireAnchor: THREE.Object3D | null;
   readonly animations: SceneAnimation[];
 }
 
@@ -290,14 +323,32 @@ export class Director {
   private readonly atmosphere = new AtmosphereSystem(this.clock);
   private readonly weatherMaterial = new WeatherMaterialSystem(this.clock);
   private readonly timeLight = new TimeLightSystem();
+  private readonly sky = new SkySystem();
   private readonly outline = new OutlineSystem();
   private readonly baseAssembler: BaseAssembler;
   private readonly assets = new RefCountedAssets();
+  /** 最近一次 TimeLightFrame 帧汇转接值（sky.update 输入；颜色为克隆，勿就地改写） */
+  private lastSkyFrame: SkyFrame | null = null;
+  /** P3 火光点光（timeLight.fireSlot 单例；场景申报挂点后领取——T31②，docs/01 §3.9） */
+  private fireLight: THREE.PointLight | null = null;
+  /**
+   * 打磨轮次1：夜间自动静默（scheduler.ts:249 契约「Director 在时间切换/首装按
+   * state.time==='night' 驱动（过渡中点切换）」）。armed=时间过渡中点待生效值（null=无挂起），
+   * active=当前已生效值（场景首装/重入时直接下发新 scheduler）。
+   */
+  private nightSilenceArmed: boolean | null = null;
+  private nightSilenceActive = false;
 
   // —— 过渡状态机（机制在 core/transition.ts）——
   private readonly timeBlend = new TimeBlendController({
     applyTimeFrame: (params, channels, blend) => {
       this.applyLightingNow(params, channels, blend);
+      // 打磨轮次1：夜间静默随时间过渡中点切换（§3.5.3 离散量 blend≥0.5 一次性翻转；
+      // 挂起值消费一次即清空，连续 retarget 由 onStateChanged 重挂最新目标）。
+      if (this.nightSilenceArmed !== null && blend >= DISCRETE_SWITCH_BLEND) {
+        this.setNightSilenceNow(this.nightSilenceArmed);
+        this.nightSilenceArmed = null;
+      }
     },
   });
   private readonly weatherLightModBlend = new WeatherLightModBlend({
@@ -309,6 +360,8 @@ export class Director {
   private vehicleSwap: FadeSwapRunner | null = null;
   private pendingSceneId: string | null = null;
   private pendingVehicleId: string | null = null;
+  /** 当前生效天气预设（天气粒子锚定用：T33 setWeatherSet 以营位锚点为中心 + 场景重入 reanchorWeather）。 */
+  private activeWeatherPreset: WeatherPreset | null = null;
 
   // —— 当前会话与已应用维（同值守卫 / retarget 快照来源）——
   private scene: AssembledScene | null = null;
@@ -375,6 +428,49 @@ export class Director {
       },
       (dt) => this.scene?.scheduler.update(dt),
       () => this.outline.update(),
+      (dt) => {
+        // —— T31⑧ 天空（穹顶渐变/条带/星空月面 0.2s 淡变；帧值来自帧汇 lastSkyFrame）——
+        // T45 修复④：天空端点经 AtmosphereSystem 天气压缩（§4.4.4「sky 向天气灰调 lerp(0.5×cloudiness)」
+        // + 五-4 景深压缩）——此前压缩值无任何消费方，穹顶直用 timeLight 未压缩端点，晴/雨天空零变化。
+        if (this.lastSkyFrame !== null) {
+          this.sky.update(dt, {
+            ...this.lastSkyFrame,
+            zenith: this.atmosphere.skyZenithCompressed,
+            horizon: this.atmosphere.skyHorizonCompressed,
+          });
+        }
+        // —— T31② P3 火光点光（§4.3.3-② intensity=emberPower×0.6；§3.9 预算位唯一，场景申报领取）——
+        const anchor = this.scene?.fireAnchor ?? null;
+        if (anchor) {
+          if (!this.fireLight) this.fireLight = this.timeLight.acquireFireLight();
+          if (this.fireLight) {
+            anchor.getWorldPosition(this.fireLight.position);
+            this.fireLight.intensity = this.timeLight.channels.emberPower * 0.6;
+            this.fireLight.visible = this.fireLight.intensity >= 0.02;
+          }
+        } else if (this.fireLight) {
+          this.timeLight.releaseFireLight();
+          this.fireLight = null;
+        }
+        // —— T31⑥ 场景发射器语义调制（§7.1.3 逐 kind 公式；指数趋近免离散跳变）——
+        const channels = this.timeLight.channels;
+        for (const binding of this.scene?.emitterBindings ?? []) {
+          let target = binding.baseRate;
+          if (binding.kind === 'steam') {
+            // §7.1.3 steam 行 + B6：发电机蒸汽常转 base（authored rate<2 视为常转基值 floor）
+            target = Math.max(2.2 * channels.smokePower + 0.4, binding.baseRate < 2 ? binding.baseRate : 0);
+          } else if (binding.kind === 'spark') {
+            target = 6 * channels.emberPower; // §7.1.3 spark 行（B8 白天火熄=ember 0）
+          } else if (binding.kind === 'dust') {
+            target = this.timeLight.timeId === 'day' ? 0 : binding.baseRate; // §7.1.3「仅 beam>0.3」（J5 day 熄）
+          } else if (binding.kind === 'mist') {
+            target = MIST_TIME_RATES[this.timeLight.timeId] ?? binding.baseRate; // §7.1.6 晨雾行
+          }
+          const next = binding.rate + (target - binding.rate) * (1 - Math.exp(-dt / 0.4));
+          binding.handle.setRate(Math.max(0, next));
+          binding.rate = next;
+        }
+      },
     );
     // ④ 场景帧驱动：lightHooks.update? + SceneAnimation[]
     this.engine.hooks.scene.push((dt, elapsed) => {
@@ -384,15 +480,22 @@ export class Director {
       for (const animation of current.animations) animation.update(dt, elapsed);
     });
 
-    // 全局灯架/雾挂载（跨场景常驻，§3.4-5/§3.4-8）
+    // 全局灯架/雾/天空挂载（跨场景常驻，§3.4-5/§3.4-8；天空=render/sky.ts T31⑧）
     this.timeLight.attach(this.engine.scene);
     this.atmosphere.attach(this.engine.scene);
+    this.sky.attach(this.engine.scene);
     this.engine.scene.add(this.particles.root);
     this.weatherMaterial.setCamera(this.engine.camera);
-    // 时间帧汇：天空端点/雾基准 → AtmosphereSystem（§3.4-5 输出面）
+    // 时间帧汇：天空端点/雾基准 → AtmosphereSystem + SkySystem（§3.4-5 输出面；月向=主光方向）
     this.timeLight.setFrameSink((frame) => {
       this.atmosphere.setSkyColors(frame.sky.zenith, frame.sky.horizon);
       this.atmosphere.setTimeFogBase(frame.fogBase);
+      this.lastSkyFrame = {
+        zenith: frame.sky.zenith,
+        horizon: frame.sky.horizon,
+        skyExtra: frame.sky.skyExtra,
+        lightDir: frame.params.lightDir.clone(),
+      };
     });
     // 六通道附加消费方：LightBreath（呼吸功率）+ WeatherMaterial（反光条功率）
     this.timeLight.addChannelSink({
@@ -455,8 +558,11 @@ export class Director {
         const preset = this.tryGetTimePreset(event.to);
         if (preset) {
           this.appliedTimeId = preset.id;
+          this.timeLight.setTimeId(preset.id); // T31：SceneLightState.time 随切换档更新（离散量门控依赖）
           // retarget：以当前插值中间态为新起点（docs/05 §4.3.5「中途改档不跳变」）
           this.timeBlend.start(preset, this.lastSnapshot);
+          // 打磨轮次1：夜间静默挂起至过渡中点（scheduler.ts:249 契约；重挂覆盖旧挂起值）
+          this.nightSilenceArmed = preset.id === 'night';
         }
         break;
       }
@@ -474,7 +580,8 @@ export class Director {
 
   /** 【天气切换】1500ms：粒子交叉/材质七分量/风力趋近由系统内平滑，lightMod 三标量本地插值。 */
   private startWeatherTransition(preset: WeatherPreset): void {
-    this.particles.setWeatherSet(preset.particles); // 旧集合 0.5s 淡出+新集合淡入（§4.4.3）
+    this.activeWeatherPreset = preset;
+    this.particles.setWeatherSet(this.liftedWeatherEntries(preset)); // 旧集合 0.5s 淡出+新集合淡入（§4.4.3）
     this.weatherMaterial.setWeather(preset.material, WEATHER_TRANSITION_MS); // 七分量 smoothstep 插值
     this.wind.setWind(WIND_BASE_POWER * preset.windMul); // 指数趋近 τ=0.6s（§4.4.3）
     this.weatherLightModBlend.start(preset.lightMod, this.currentLightMod);
@@ -499,6 +606,8 @@ export class Director {
       props: null,
       scheduler: null,
       emitterHandles: [],
+      emitterBindings: [],
+      fireAnchor: null,
       animations: [],
     };
     const delegate: FadeSwapDelegate = {
@@ -513,6 +622,7 @@ export class Director {
         if (session.props) this.weatherMaterial.register(session.props.weatherSurfaces);
       },
       beforeFadeIn: (newRoot) => this.activateScene(session, newRoot),
+      discardNewRoot: (newRoot) => this.discardSceneSession(session, newRoot),
     };
     const runner = new FadeSwapRunner(delegate);
     runner.start(old.root);
@@ -534,6 +644,7 @@ export class Director {
       getNewRoot: () => session.root,
       unloadOld: (oldRoot) => this.unloadVehicle(old, oldRoot),
       beforeFadeIn: (newRoot) => this.activateVehicle(session, newRoot),
+      discardNewRoot: (newRoot) => this.discardVehicleSession(session, newRoot),
     };
     const runner = new FadeSwapRunner(delegate, { maxBuildStages: 2 });
     runner.start(old.root);
@@ -577,24 +688,34 @@ export class Director {
     // 场景 + 车型同步装配（三阶段同步跑完 = FadeSwap 分帧路径的同一产物结构）
     this.scene = this.assembleSceneNow(sceneModule);
     this.vehicle = this.assembleVehicleNow(vehicleModule);
+    // T31 接线修复：同步装配路径此前漏登记场景/车型光照钩子与场景雾基底（仅 FadeSwap 的
+    // activateScene/activateVehicle 路径登记）——默认组合首载后 SceneLightState 不达场景钩子、
+    // 内饰灯钩子不被驱动、baseFog 停留在系统默认。三行与 activateScene:843-844/activateVehicle:866 同源。
+    this.timeLight.setSceneHooks(sceneModule.lightHooks);
+    this.timeLight.setInteriorHooks(vehicleModule.interiorLightHooks);
+    this.atmosphere.setBaseFog(sceneModule.palette.baseFog);
 
     // 时间预设：先中性直呈（空注册表兜底），有预设即覆盖 —— 均为 blend=1，首帧不播过渡
     this.applyLightingNow(this.lastSnapshot.global, ZERO_CHANNELS, 1);
     const timePreset = this.tryGetTimePreset(next.time);
     if (timePreset) {
       this.appliedTimeId = timePreset.id;
+      this.timeLight.setTimeId(timePreset.id); // T31：同上（装配路径同步登记时间维 id）
       this.applyLightingNow(timePreset.lighting, timePreset.channels, 1);
     }
+    // 打磨轮次1：首装按装配时间档直接生效（无过渡可走中点；scheduler.ts:249 契约「首装」分支）
+    this.setNightSilenceNow(next.time === 'night');
 
     // 天气预设：材质七分量即时、风力直取目标、粒子直挂、lightMod 直呈（晴朗=全中性直通）
     const weatherPreset = this.tryGetWeatherPreset(next.weather);
     if (weatherPreset) {
       this.appliedWeatherId = weatherPreset.id;
+      this.activeWeatherPreset = weatherPreset;
       this.weatherMaterial.setComponentsInstant(weatherPreset.material);
       this.atmosphere.setWeatherFogMul(weatherPreset.material.fogMul);
       this.atmosphere.setCloudiness(weatherPreset.material.cloudShadow);
       this.wind.setWind(WIND_BASE_POWER * weatherPreset.windMul, { immediate: true });
-      this.particles.setWeatherSet(weatherPreset.particles);
+      this.particles.setWeatherSet(this.liftedWeatherEntries(weatherPreset)); // T33：同 startWeatherTransition
       this.setLightModNow(weatherPreset.lightMod);
     }
   }
@@ -611,6 +732,8 @@ export class Director {
       props: null,
       scheduler: null,
       emitterHandles: [],
+      emitterBindings: [],
+      fireAnchor: null,
       animations: [],
     };
     for (let stage = 0; stage < 3; stage++) this.buildSceneStage(session, stage);
@@ -627,6 +750,8 @@ export class Director {
       animations: session.animations,
       scheduler: session.scheduler,
       emitterHandles: session.emitterHandles,
+      emitterBindings: session.emitterBindings,
+      fireAnchor: session.fireAnchor,
       cloths: session.props.cloths,
       lamps: session.props.lamps,
       scope: session.scope,
@@ -678,10 +803,14 @@ export class Director {
     const anchorPos = session.terrain!.campAnchor.position;
     for (const spec of props.emitters) {
       // 场景发射器以营位锚点为中心（EmitterSpec 契约只带 area 尺寸，锚点由编排侧下发）
-      session.emitterHandles.push(
-        this.particles.add(spec, { anchor: anchorPos.clone(), group: 'scene' }),
-      );
+      const handle = this.particles.add(spec, { anchor: anchorPos.clone(), group: 'scene' });
+      session.emitterHandles.push(handle);
+      // T31⑥：spec↔handle 同序配对（调制公式按 kind 查 §7.1.3，见帧序 systems 段）
+      session.emitterBindings.push({ handle, kind: spec.kind, baseRate: spec.rate, rate: spec.rate });
     }
+    // T31②：P3 火光挂点发现（场景申报=name 以 `/fire-light-anchor` 结尾；docs/01 §3.9
+    // 「松林篝火/避难所火堆/海崖烧烤炉」——无申报场景不占用预算位）
+    session.fireAnchor = findFireLightAnchor(props.group);
     this.weatherMaterial.registerReflectionLamps(props.lamps, { groundY: anchorPos.y });
     // ③ 场景动效（EventScheduler 以场景 id 为种子——同组合可复现）
     session.scheduler = new EventScheduler(`scene:${module.id}`);
@@ -714,6 +843,7 @@ export class Director {
     this.outline.removeFrom(oldRoot);
     oldRoot.removeFromParent();
     this.timeLight.releaseFireLight();
+    this.fireLight = null; // T31②：挂点随场景卸载——引用复位（新场景申报后由帧序重新领取）
     scene.scope.release();
   }
 
@@ -724,6 +854,42 @@ export class Director {
     this.outline.removeFrom(oldRoot);
     oldRoot.removeFromParent();
     vehicle.scope.release();
+  }
+
+  // =========================================================================
+  // 崩溃兜底（FadeSwap 激活 throw 后孤儿根回收）：旧根此时已卸载（或卸载中途崩溃），
+  // 半成品新根仍挂 scene 图且 visible=false——按构建进度幂等回收全部资源并摘出场景图，
+  // 防「隐藏场景根」滞留泄漏（内存/几何/材质不释放）。错误由 FadeSwapRunner 上抛，此处不吞。
+  // =========================================================================
+
+  /** 场景会话回收（unloadScene 的半成品版：逐项按构建进度守卫，stage 未跑到的项自然为空）。 */
+  private discardSceneSession(session: SceneBuildSession, root: THREE.Object3D): void {
+    for (const animation of session.animations) animation.dispose();
+    if (session.props) {
+      this.wind.unregister(session.props.cloths);
+      this.breath.unregister(session.props.lamps);
+    }
+    // 打磨轮次1：本会话可能已把天气面/反光条注册进系统（stage2 + activateScene 补挂路径），
+    // 且反光条 mesh 为系统自建——整表清空（含 mesh 摘除释放）而非只摘 surfaces，防下次 attach
+    // 后旧灯位鬼影；崩溃场景下不存在需保留的注册（车型面由下次 activateScene 重注册）。
+    this.weatherMaterial.clearRegistrations();
+    for (const handle of session.emitterHandles) handle.dispose();
+    this.outline.removeFrom(root);
+    this.weatherMaterial.detach(); // 云影 quad/反光条容器随半成品根摘除（stage0 attach 的归宿）
+    root.removeFromParent();
+    if (this.scene && this.scene.root === root) this.scene = null; // 激活中途崩溃：不指向已丢弃会话
+    session.scope?.release(); // scope 在 stage0 即开启，可能存在则释放（引用计数归零 dispose）
+  }
+
+  /** 车型会话回收（unloadVehicle 的半成品版；车型会话无天气 attach/scheduler）。 */
+  private discardVehicleSession(session: VehicleBuildSession, root: THREE.Object3D): void {
+    this.wind.unregister(session.cloths);
+    this.breath.unregister(session.module.interiorLightHooks.lamps);
+    if (session.surfaces.length > 0) this.weatherMaterial.unregister(session.surfaces);
+    this.outline.removeFrom(root);
+    root.removeFromParent();
+    if (this.vehicle && this.vehicle.root === root) this.vehicle = null; // 激活中途崩溃同上
+    session.scope?.release();
   }
 
   // =========================================================================
@@ -742,18 +908,71 @@ export class Director {
       animations: session.animations,
       scheduler: session.scheduler,
       emitterHandles: session.emitterHandles,
+      emitterBindings: session.emitterBindings,
+      fireAnchor: session.fireAnchor,
       cloths: session.props.cloths,
       lamps: session.props.lamps,
       scope: session.scope,
     };
     this.timeLight.setSceneHooks(session.module.lightHooks);
     this.atmosphere.setBaseFog(session.module.palette.baseFog);
+    // 打磨轮次1：新场景 scheduler 为全新实例（默认不静默）——按当前生效静默态立即接管，
+    // 防夜间换场景/破晓重入时 nightSilent 事件（海鸟/松鼠）即刻出鸟；时间过渡挂起值
+    // （nightSilenceArmed）不受影响，到中点后照常落在本场景 scheduler 上。
+    this.setNightSilenceNow(this.nightSilenceActive);
+    // 打磨轮次1修复：天气面贴花跨场景持久化。stage0 attach 已把 weatherMaterial.root 重指新根并把
+    // 云影 quad/反光条容器移入新根（weatherMaterial.ts:400-407），随后 unloadScene 的 detach()
+    // （director.ts:823）按重指后的 this.root 把两容器从新根摘下（weatherMaterial.ts:409-414）——
+    // 贴花从此丢失；且 clearRegistrations 连带清空反光条注册（registeredLamps/strips），★T20 补偿
+    // 只重注册 weatherSurfaces。此处统一补挂：attach 幂等归位两容器 + 按新场景灯位重建反光条
+    // （registerReflectionLamps 对已注册灯幂等跳过，同 stage2:794 同参调用）。
+    this.weatherMaterial.attach(session.root); // 云影 quad + 反光条容器归位新根（若仍在则 no-op）
+    this.weatherMaterial.registerReflectionLamps(session.props.lamps, {
+      groundY: session.terrain.campAnchor.position.y,
+    });
     // 当前 time 立即下发（场景钩子 blend=1；天空/雾经帧汇随 apply 流出）
     this.applyLightingNow(this.lastSnapshot.global, this.lastSnapshot.channels, 1);
     if (this.vehicle) this.placeVehicle(this.vehicle); // 按新 campAnchor 重新对位（三·总则）
     if (this.vehicle && this.vehicle.surfaces.length > 0) {
       this.weatherMaterial.register(this.vehicle.surfaces); // 场景卸载 clearRegistrations 连带清空车型面——重注册
     }
+    // T33 修复：天气粒子跨场景持续（FadeSwap 不重挂天气集合），锚点仍指旧场景营位——
+    // 按新场景 campAnchor 重算「悬空发射锚点」（同 liftedWeatherEntries 口径）并原地重锚
+    // （发射期取值、存量粒子不跟随——与 Object3D 锚点同一语义）。
+    if (this.activeWeatherPreset && this.activeWeatherPreset.particles.length > 0) {
+      this.particles.reanchorWeather(this.weatherAnchorBase(this.activeWeatherPreset));
+    }
+  }
+
+  /**
+   * 天气粒子「悬空发射锚点」基点（T45 修复②）：营位锚点 + 抬升量。
+   * 抬升 = max(area.y/2 + |vel0.y|×lifetime)（各粒子 spec 取最大）——出生盒底 = 营位地面、
+   * 存活末端恰触地（发射区高≈落差，docs/05 五-3 注记②自洽式）。原样锚定营位地面高度时：
+   * 半数出生点在台面之下 + 雨柱与车体/构筑物同高同位（默认机位实测 91% 深度剔除 → 屏幕零雨丝）。
+   */
+  private weatherAnchorBase(preset: WeatherPreset): THREE.Vector3 {
+    const anchor = this.scene?.campAnchor.position;
+    const base = new THREE.Vector3(anchor?.x ?? 0, anchor?.y ?? 0, anchor?.z ?? 0);
+    let lift = 0;
+    for (const spec of preset.particles) {
+      lift = Math.max(lift, spec.area.y / 2 + Math.abs(spec.vel0.y) * spec.lifetime);
+    }
+    base.y += lift;
+    return base;
+  }
+
+  /** 天气集合条目（T45 修复②）：spec + 该 spec 的悬空锚点（多 spec 预设逐 spec 精确抬升）。 */
+  private liftedWeatherEntries(preset: WeatherPreset): WeatherEmitterInput[] {
+    const anchor = this.scene?.campAnchor.position;
+    return preset.particles.map((spec) => {
+      const fall = Math.abs(spec.vel0.y) * spec.lifetime;
+      return {
+        spec,
+        anchor: anchor
+          ? new THREE.Vector3(anchor.x, anchor.y + spec.area.y / 2 + fall, anchor.z)
+          : undefined,
+      };
+    });
   }
 
   private activateVehicle(session: VehicleBuildSession, _newRoot: THREE.Object3D): void {
@@ -916,7 +1135,23 @@ export class Director {
     this.lastSnapshot = { global: params, channels };
   }
 
-  /** weather.lightMod 直写（glowBoost → LightBreath 光晕叠加，docs/05 §4.4.4）。 */
+  /**
+   * 夜间自动静默直写（打磨轮次1）：nightSilent 事件（海鸟/松鼠，docs/05 §7.1.5-1/2「夜间归巢」）
+   * 倒计时冻结，纸巾/光斑/双闪不受影响——scheduler.setNightSilence 契约面。首装/场景重入路径
+   * 直取当前生效值；时间切换路径经 armed 于过渡中点调用（timeBlend 回调）。
+   */
+  private setNightSilenceNow(active: boolean): void {
+    this.nightSilenceActive = active;
+    this.scene?.scheduler.setNightSilence(active);
+  }
+
+  /**
+   * weather.lightMod 直写（glowBoost → LightBreath 光晕叠加，docs/05 §4.4.4）。
+   * T45 修复③：lightMod 只在 TimeLightSystem.applyParams 内合成生效（composeWeatherLightMod），
+   * 而 applyParams 仅由时间过渡/装配/激活路径调用——天气唯一切换路径此前只存不算，
+   * intensityMul/ambientMul 永不到达 rig 与天空（晴/雨 rig 强度实测逐位相等）。
+   * 以当前快照立即重应用：1500ms 过渡期本口每帧被 weatherLightModBlend 调用 → 每帧合成流入，平滑无跳变。
+   */
   private setLightModNow(mod: WeatherPreset['lightMod']): void {
     this.currentLightMod = {
       intensityMul: mod.intensityMul,
@@ -925,6 +1160,7 @@ export class Director {
     };
     this.timeLight.setWeatherLightMod(this.currentLightMod);
     this.breath.setGlowBoost(this.currentLightMod.glowBoost);
+    this.applyLightingNow(this.lastSnapshot.global, this.lastSnapshot.channels, 1);
   }
 
   /** 全量收尾（Engine 销毁路径）：反注册 + assets 释放 + 系统 dispose + 钩子摘除。 */
@@ -945,6 +1181,7 @@ export class Director {
     this.engine.scene.remove(this.particles.root);
     this.breath.dispose();
     this.atmosphere.dispose();
+    this.sky.dispose();
     this.weatherMaterial.dispose();
     this.assets.disposeAll();
     this.engine.hooks.clock = null;

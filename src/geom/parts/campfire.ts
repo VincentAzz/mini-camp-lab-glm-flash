@@ -138,6 +138,13 @@ export function createGrill(params: GrillParams): GrillResult {
   smokeAnchor.position.y = legHeight + 0.55;
   group.add(smokeAnchor);
 
+  // P3 火光点光挂点（docs/01 §3.9「海崖烧烤炉」；T31②：Director 按此申报领取 fireSlot——
+  // 点光本体归 Director/timeLight，本件只产出锚点）
+  const fireLightAnchor = new THREE.Object3D();
+  fireLightAnchor.name = `${id}/fire-light-anchor`;
+  fireLightAnchor.position.y = legHeight + 0.22;
+  group.add(fireLightAnchor);
+
   return { group, coalMaterial, smokeAnchor };
 }
 

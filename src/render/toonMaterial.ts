@@ -256,6 +256,7 @@ const GRADIENT_INCLUDE_ANCHOR = '#include <gradientmap_pars_fragment>';
 const GRADIENT_RETURN_ANCHOR = 'return vec3( texture2D( gradientMap, coord ).r );';
 const NORMAL_MAPS_ANCHOR = '#include <normal_fragment_maps>';
 const LIGHTS_END_ANCHOR = '#include <lights_fragment_end>';
+const BEGIN_VERTEX_ANCHOR = '#include <begin_vertex>';
 
 /** 补丁①/湿面并档：重写 gradientmap 块的 return（include 行级替换；锚点失配抛错 → 降级）。 */
 function buildGradientChunkReplacement(plan: ToonPatchPlan): string {
@@ -294,6 +295,7 @@ export function applyToonPatches(
 ): void {
   const decls = new Set<string>();
   let frag = shader.fragmentShader;
+  let vert = shader.vertexShader;
   try {
     // —— ① RGB 色阶 / 湿面色带并档：重写 gradientmap 块 ——
     if (plan.rgbRamp || plan.wetReactive) {
@@ -323,6 +325,37 @@ export function applyToonPatches(
         '\tdiffuseColor.rgb = mix( diffuseColor.rgb, uSnowColor, saturate( uSnow ) * snowMask );',
         '}',
       );
+      if (plan.snow === 'full') {
+        // 五-5 地面薄雪：fresnel 闪点 ×snowCover×0.3（雪面反光）。掠射角 pow(1−N·V,4) 处
+        // worldXZ 稀疏格点（hash 阈值 step 0.78）亮起，uWindPhase（WindSystem 每帧写 =elapsed）
+        // 提供闪烁相位；加到 totalEmissiveRadiance 同 rim/specStreak 口径——不受漫反射光照暗部
+        // 钳制，实机可见。视向取 vViewPosition（rim 补丁同源，toon lit 模板恒有）。
+        decls.add('uniform float uWindPhase;');
+        decls.add('varying vec3 vSnowWorld;');
+        shader.uniforms.uWindPhase = sharedUniforms.uWindPhase;
+        vert = replaceFirst(
+          vert,
+          'void main(',
+          'varying vec3 vSnowWorld;\nvoid main(',
+        );
+        vert = replaceFirst(
+          vert,
+          BEGIN_VERTEX_ANCHOR,
+          `${BEGIN_VERTEX_ANCHOR}\n\tvSnowWorld = ( modelMatrix * vec4( transformed, 1.0 ) ).xyz;`,
+        );
+        surfaceMods.push(
+          '{',
+          '\tfloat snowGlintNV = saturate( dot( normal, normalize( vViewPosition ) ) );',
+          '\tfloat snowGlintFres = pow( 1.0 - snowGlintNV, 4.0 );',
+          '\tvec2 snowGlintCell = floor( vSnowWorld.xz * 18.0 );',
+          '\tfloat snowGlintRand = fract( sin( dot( snowGlintCell, vec2( 127.1, 311.7 ) ) ) * 43758.5453 );',
+          '\tvec2 snowGlintIn = fract( vSnowWorld.xz * 18.0 ) - 0.5;',
+          '\tfloat snowGlintDot = smoothstep( 0.26, 0.05, length( snowGlintIn ) );',
+          '\tfloat snowGlintTw = 0.55 + 0.45 * sin( uWindPhase * 2.7 + snowGlintRand * 6.2831 );',
+          '\ttotalEmissiveRadiance += uSnowColor * ( snowGlintFres * snowGlintTw * snowGlintDot * step( 0.78, snowGlintRand ) * saturate( uSnow ) * 0.3 );',
+          '}',
+        );
+      }
     }
 
     if (plan.wetReactive) {
@@ -404,6 +437,7 @@ export function applyToonPatches(
     }
 
     shader.fragmentShader = frag; // ← 全部锚点手术成功才落盘；否则保持原样（纯内建）
+    shader.vertexShader = vert; // 雪面闪点 vSnowWorld varying（无 patch 时与原串相同，no-op）
   } catch (err) {
     material.userData.patchDegraded = true;
     console.warn(
