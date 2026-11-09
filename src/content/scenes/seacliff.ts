@@ -561,7 +561,8 @@ function buildProps(ctx: SceneBuildContext): SceneProps {
   const guyGeometry = assets.geometry('seacliff/tarp-guys', () => {
     const curves: readonly THREE.Vector3[][] = [
       [new THREE.Vector3(-1.5, 1.7, -1.2), new THREE.Vector3(-2.3, 0.01, -2.0)],
-      [new THREE.Vector3(1.5, 1.7, -1.2), new THREE.Vector3(2.3, 0.01, -2.0)],
+      // 穿模修复（clip-evidence）：右拉绳原走向斜穿越野货斗（A2 组合），改为沿天幕前缘垂落、桩位前移避开货斗包络
+      [new THREE.Vector3(1.5, 1.7, -1.2), new THREE.Vector3(1.6, 1.2, -2.3), new THREE.Vector3(1.35, 0.01, -2.6)],
     ];
     const merged = mergeGeometries(curves.map((points) => tube({ pointsOrCurve: points, radius: 0.012, tubularSegments: 12 })));
     if (!merged) throw new Error('[seacliff] 天幕拉绳合并失败');
@@ -573,16 +574,18 @@ function buildProps(ctx: SceneBuildContext): SceneProps {
 
   const table = createFoldTable({ assets, id: 'foldTable/camp' });
   table.name = 'seacliff/fold-table';
-  table.position.set(-1.7, y, 1.35);
+  // 穿模修复（clip-evidence）：折叠桌框原位被 A 型底盘 AABB 扫入，外挪至野餐垫后缘
+  table.position.set(-1.7, y, 3.9);
   table.rotation.y = 0.12;
   group.add(table);
   const chairs = createFoldChairSet({
     assets,
     name: 'seacliff/fold-chairs',
     fabricColor: '#6a8aa8',
+    // 穿模修复（clip-evidence）：椅背原位戳入 C 型侧裙/越野后轮区，外挪至野餐垫两侧
     placements: [
-      { position: [-2.45, y, 2.05], rotY: -0.55 },
-      { position: [-1.0, y, 2.2], rotY: 0.5 },
+      { position: [-2.85, y, 3.7], rotY: -0.55 },
+      { position: [-1.3, y, 3.7], rotY: 0.5 },
     ],
   });
   group.add(chairs);
@@ -663,7 +666,8 @@ function buildProps(ctx: SceneBuildContext): SceneProps {
   /* — ③ 烧烤炉（Lathe 烤碗+盖+3 腿+炭；炊烟 EmitterSpec steam）— */
   const grill = createGrill({ assets, id: 'campfire/grill-seacliff' });
   grill.group.name = 'seacliff/grill';
-  grill.group.position.set(1.35, y, 1.5);
+  // 穿模修复（clip-evidence）：原 (1.35,1.5) 被长车前轮带扫入（A/C/拖挂/越野组合轮区），沿切向外挪至营地后缘
+  grill.group.position.set(1.35, y, 4.45);
   grill.group.rotation.y = -0.4;
   group.add(grill.group);
   propsRef.coalMaterial = grill.coalMaterial;
@@ -865,11 +869,12 @@ function buildProps(ctx: SceneBuildContext): SceneProps {
   const hose = createHoseRun({
     assets,
     id: 'gardenHose/seacliff-run',
+    // 穿模修复（clip-evidence）：原走线横穿 A 型/拖挂皮卡左前轮区，改为短距盘卷在水电桩旁（贴卷盘垂落）
     points: [
-      new THREE.Vector3(2.98, y + 0.46, 0.72),
-      new THREE.Vector3(2.5, y + 0.1, 1.15),
-      new THREE.Vector3(2.05, y + 0.05, 1.7),
-      new THREE.Vector3(1.75, y + 0.03, 2.2),
+      new THREE.Vector3(2.98, y + 0.15, 0.4),
+      new THREE.Vector3(2.85, y + 0.06, 0.15),
+      new THREE.Vector3(2.7, y + 0.04, -0.15),
+      new THREE.Vector3(2.52, y + 0.03, -0.42),
     ],
     radius: 0.028,
   });
@@ -879,7 +884,8 @@ function buildProps(ctx: SceneBuildContext): SceneProps {
   /* — ⑧ 小型折叠自行车（bicycle 部件，车型章 3.2/3.3 复用）— */
   const bicycle = createFoldBicycle({ assets, id: 'bicycle/seacliff', frameColor: '#3f6fa8' });
   bicycle.name = 'seacliff/bicycle';
-  bicycle.position.set(2.5, y, 0.05);
+  // 穿模修复（clip-evidence）：原位倾靠 C 型/A 型/皮卡前保险杠，外挪至水电桩前净区（z 再南移避开皮卡前杠角）
+  bicycle.position.set(4.6, y, -1.0);
   bicycle.rotation.y = 1.15;
   group.add(bicycle);
 

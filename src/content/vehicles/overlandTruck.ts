@@ -588,12 +588,15 @@ function buildExterior(ctx: VehicleBuildContext): VehicleExterior {
   }
 
   /* —— 全地形胎轮组 wheel(0.50,0.34,'at') ×4（五车最大胎径，18 只绕周凸块；§5.6 InstancedGroup）—— */
+  // 接地修正（clip-probe LOW）：AT 胎凸块外缘=radius·(1+0.16·0.82)≈1.1312·radius，轮心若只抬 wheelR
+  //   则胎底低于地面 0.066u——轮组与轮眉按「凸块触地半径」落位（探针 |tireMinY−ground|≤0.01）。
+  const tireContactY = F.wheelR * 1.1312;
   const wheelGeometries = createWheelGeometries(assets, 'vehicleKit/wheel/overland', { radius: F.wheelR, width: F.wheelW, kind: 'at' });
   const tires = new InstancedGroup(wheelGeometries.tire, tireMat, { capacity: 4, withShell: { width: 0.02 }, name: 'overlandTruck/wheel-tires' });
   const hubs = new InstancedGroup(wheelGeometries.hub, hubMat, { capacity: 4, withShell: { width: 0.02 }, name: 'overlandTruck/wheel-hubs' });
   const wheelMatrix = new THREE.Matrix4();
   for (const [x, z] of [[F.axleF, F.wheelZ], [F.axleF, -F.wheelZ], [F.axleR, F.wheelZ], [F.axleR, -F.wheelZ]] as const) {
-    wheelMatrix.identity().setPosition(x, F.wheelR, z);
+    wheelMatrix.identity().setPosition(x, tireContactY, z);
     tires.add(wheelMatrix, COLORS.tire);
     hubs.add(wheelMatrix, COLORS.hub);
   }
@@ -614,7 +617,7 @@ function buildExterior(ctx: VehicleBuildContext): VehicleExterior {
   for (const [x, z] of [[F.axleF, F.wheelZ], [F.axleF, -F.wheelZ], [F.axleR, F.wheelZ], [F.axleR, -F.wheelZ]] as const) {
     const fender = new THREE.Mesh(fenderGeometry, fenderMat);
     fender.name = `overlandTruck/fender/${x}/${z}`;
-    fender.position.set(x, F.wheelR, z);
+    fender.position.set(x, tireContactY, z); // 与胎心同高（保持弧顶罩胎关系）
     fender.castShadow = true;
     group.add(fender);
   }

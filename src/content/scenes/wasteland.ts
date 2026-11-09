@@ -348,7 +348,8 @@ function buildProps(ctx: SceneBuildContext): SceneProps {
   /* — ⑥ 废旧汽车残骸+轮胎堆（无乘员/骸骨——一·6；缺 1 轮；轮胎 ×5 金字塔）— */
   const wreck = createWreck(assets, 'wasteland/wreck');
   wreck.group.name = 'wasteland/wreck';
-  wreck.group.position.set(6.15, 0, 2.1);
+  // 穿模修复（clip-evidence）：残骸车尾原位戳入 A 型车头 fascia/skirt（嵌入约 1/3），沿径向外挪 0.6
+  wreck.group.position.set(6.75, 0, 2.1);
   wreck.group.rotation.y = 0.55;
   group.add(wreck.group);
   const tires = createTirePyramid(assets, 'wasteland/tire-pyramid', wreck.tireMaterial);
@@ -359,8 +360,8 @@ function buildProps(ctx: SceneBuildContext): SceneProps {
   // 残骸顶雪壳（roofTop——五-5「残骸顶」）
   const wreckSnow = new THREE.Mesh(
     assets.geometry('wasteland/snow-wreck', () => {
-      const roof = new THREE.BoxGeometry(1.7, 0.04, 1.66).rotateY(0.55).translate(6.15, wreck.roofY + 0.04, 2.1);
-      const hood = new THREE.BoxGeometry(1.0, 0.04, 1.6).rotateY(0.55).translate(6.72, 0.9, 2.36);
+      const roof = new THREE.BoxGeometry(1.7, 0.04, 1.66).rotateY(0.55).translate(6.75, wreck.roofY + 0.04, 2.1);
+      const hood = new THREE.BoxGeometry(1.0, 0.04, 1.6).rotateY(0.55).translate(7.32, 0.9, 2.36);
       const merged = mergeGeometries([roof, hood]);
       if (!merged) throw new Error('[wasteland] 残骸顶雪壳合并失败');
       return merged;
@@ -393,7 +394,8 @@ function buildProps(ctx: SceneBuildContext): SceneProps {
   /* — ⑧ 净水装置+发电机（滤瓶 blink 2.4s 青 + 蒸汽 EmitterSpec steam 常转 base 1.5/s）— */
   const purifier = createPurifierGenerator(assets, 'wasteland/purifier', CHANNELS.cyanGlow);
   purifier.group.name = 'wasteland/purifier';
-  purifier.group.position.set(-2.35, 0, -2.75);
+  // 穿模修复（clip-evidence）：原位处于 C 型滑出舱外伸包络/B 型尾门板范围内，沿营位左后向外挪（−0.7,−0.7）
+  purifier.group.position.set(-3.05, 0, -3.45);
   purifier.group.rotation.y = 0.5;
   group.add(purifier.group);
   const ledLamp: LampHandle = {
@@ -458,7 +460,8 @@ function buildProps(ctx: SceneBuildContext): SceneProps {
   /* — ⑪ 油桶改造烧烤架火堆（campfire 变体；火光点光 P3 归点光池，场景交 emberPower）— */
   const grill = createBarrelGrill(assets, 'wasteland/grill');
   grill.group.name = 'wasteland/grill';
-  grill.group.position.set(2.35, 0, 2.45);
+  // 穿模修复（clip-evidence）：油桶烤炉原位被拖挂皮卡左前轮扫入，沿切向外挪（+0.1,+0.7）脱离轮/翼子板包络
+  grill.group.position.set(2.45, 0, 3.15);
   grill.group.rotation.y = -0.35;
   group.add(grill.group);
   propsRef.coalMaterial = grill.coalMaterial;

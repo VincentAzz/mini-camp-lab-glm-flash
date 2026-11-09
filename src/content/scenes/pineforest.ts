@@ -86,8 +86,10 @@ const CAMP_X = 0.4;
 const CAMP_Z = 0.2;
 const CAMP_HEADING = 0.2;
 const CAMP_RADIUS = 4.0;
-/** 篝火/平台/锚树等布置位（营位半径外缘 or 车身侧向净空外，J2 车辆不停平台）。 */
-const FIRE_POS = new THREE.Vector3(3.3, GRAVEL_TOP, 1.15);
+/** 篝火/平台/锚树等布置位（营位半径外缘 or 车身侧向净空外，J2 车辆不停平台）。
+ *  穿模修复（clip-evidence）：原 (3.3,1.15) 火圈+凳环整体处于长车前轮/翼子板带（A/拖挂/越野组合），
+ *  连同环形凳外挪至 (+0.4,+2.6)（帐篷晾绳区外缘，五车型轮组包络净距 ≥0.25）。 */
+const FIRE_POS = new THREE.Vector3(3.7, GRAVEL_TOP, 3.75);
 const PLATFORM_POS = new THREE.Vector3(-3.3, GRAVEL_TOP, -2.9);
 /** 板格 4.6×3.8（2.2.2-③ 逐字）；板条净宽留边 0.16。 */
 const PLATFORM_SIZE = { w: 4.6, d: 3.8 };
@@ -97,7 +99,8 @@ const ANCHOR_B = new THREE.Vector3(4.45, GRAVEL_TOP, 2.45);
 const BRIDGE_CENTER = new THREE.Vector3(-8.55, 0, -4.83); // 谷上（y 由桥体局部高度给出）
 const BRIDGE_ROT_Y = Math.atan2(VALLEY_N.x, VALLEY_N.y); // 桥长轴垂直谷向
 const TOWEL_POST = new THREE.Vector3(2.3, GRAVEL_TOP, 3.6); // 晾绳另一端立柱（一端挂锚树 B）
-const SIGN_POS = new THREE.Vector3(-3.35, GRAVEL_TOP, 1.75);
+// 穿模修复（clip-evidence）：指示牌原位横穿拖挂挂车尾/B 型尾门，沿 −x 外挪 1.1 脱离车尾包络
+const SIGN_POS = new THREE.Vector3(-4.45, GRAVEL_TOP, 1.75);
 
 /** 色彩通道（2.2.3 十通道，docs/02 定值逐字）。 */
 const CHANNELS = {
@@ -718,7 +721,8 @@ function buildProps(ctx: SceneBuildContext): SceneProps {
   const hammockSpan = ANCHOR_A.distanceTo(ANCHOR_B);
   const hammock = createHammock({ assets, id: 'pineforest/hammock', span: hammockSpan, color: '#d8734f' });
   const hammockMid = ANCHOR_A.clone().add(ANCHOR_B).multiplyScalar(0.5);
-  hammock.mesh.position.set(hammockMid.x, y + 0.86, hammockMid.z);
+  // 穿模修复（clip-evidence）：吊床布端原位擦入 A 型前裙板（布料 AABB +0.12），沿 x 外挪 0.25（绑绳仍落在锚树冠内）
+  hammock.mesh.position.set(hammockMid.x + 0.25, y + 0.86, hammockMid.z);
   hammock.mesh.rotation.y = Math.atan2(ANCHOR_B.x - ANCHOR_A.x, ANCHOR_B.z - ANCHOR_A.z) + Math.PI / 2; // 局部 x 对齐两树连线
   group.add(hammock.mesh);
   cloths.push(hammock.handle);
@@ -818,8 +822,9 @@ function buildProps(ctx: SceneBuildContext): SceneProps {
   const benchPositions: THREE.Vector3[] = [];
   for (let i = 0; i < 6; i++) {
     const angle = (i / 6) * Math.PI * 2 + 0.26;
-    const bx = FIRE_POS.x + Math.cos(angle) * 1.2;
-    const bz = FIRE_POS.z + Math.sin(angle) * 1.2;
+    // 穿模修复（clip-evidence）：凳环半径 1.2→1.05，随火圈外挪后仍远离锚树/晾绳桩（凳沿净距 ≥0.05）
+    const bx = FIRE_POS.x + Math.cos(angle) * 1.05;
+    const bz = FIRE_POS.z + Math.sin(angle) * 1.05;
     benchPositions.push(new THREE.Vector3(bx, y, bz));
     benchMatrix.identity().setPosition(bx, y, bz);
     benchMatrix.multiply(new THREE.Matrix4().makeRotationY(-angle + Math.PI / 2)); // 凳轴切向火圈
@@ -846,9 +851,10 @@ function buildProps(ctx: SceneBuildContext): SceneProps {
     name: 'pineforest/firewood-stacks',
   });
   const woodSpecs: readonly { x: number; z: number; rotY: number }[] = [
-    { x: 4.4, z: 0.05, rotY: 0.5 },
-    { x: 4.5, z: 2.3, rotY: -0.3 },
-    { x: 2.5, z: 2.65, rotY: 0.9 },
+    // 穿模修复（clip-evidence）：#0 原位撞 A 型前保险杠/拖挂皮卡前轮，#2 原位与新凳环/越野帆布杆相叠，三堆外挪错位
+    { x: 5.65, z: -0.05, rotY: 0.5 },
+    { x: 5.4, z: 2.75, rotY: -0.3 },
+    { x: 2.43, z: 2.25, rotY: 0.9 },
   ];
   const woodMatrix = new THREE.Matrix4();
   for (const spec of woodSpecs) {

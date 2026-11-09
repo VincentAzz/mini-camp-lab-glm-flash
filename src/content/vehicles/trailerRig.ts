@@ -536,6 +536,9 @@ function buildExterior(ctx: VehicleBuildContext): VehicleExterior {
   pickup.add(firewood);
 
   /* —— 皮卡轮组 ×4（wheel 0.44/0.30 AT 轻度凸块 12）+ 轮眉 ×4 + 排气管—— */
+  // 接地修正（clip-probe LOW）：AT 凸块外缘=radius·1.1312，轮心只抬 pkWheelR 时胎底低于地面 0.058u
+  //   （挂车轮为 road 胎不受影响）——皮卡轮组按「凸块触地半径」落位，轮眉随抬 0.058。
+  const pkTireContactY = F.pkWheelR * 1.1312;
   const wheelGeometries = createWheelGeometries(assets, 'vehicleKit/wheel/trailerRig-pickup', {
     radius: F.pkWheelR, width: F.pkWheelW, kind: 'at', lugCount: 12,
   });
@@ -544,7 +547,7 @@ function buildExterior(ctx: VehicleBuildContext): VehicleExterior {
   const wheelMatrix = new THREE.Matrix4();
   for (const x of [F.pkAxleF, F.pkAxleR]) {
     for (const z of [F.pkWheelZ, -F.pkWheelZ]) {
-      wheelMatrix.identity().setPosition(x, F.pkWheelR, z);
+      wheelMatrix.identity().setPosition(x, pkTireContactY, z);
       pkTires.add(wheelMatrix, COLORS.tire);
       pkHubs.add(wheelMatrix, COLORS.hub);
     }
@@ -552,7 +555,7 @@ function buildExterior(ctx: VehicleBuildContext): VehicleExterior {
   pickup.add(pkTires.group, pkHubs.group);
   buildFenders(assets, pickup, 'trailerRig/pk-fender', F.pkWheelR + 0.05, 0.3, [
     [F.pkAxleF, F.pkWheelZ], [F.pkAxleF, -F.pkWheelZ], [F.pkAxleR, F.pkWheelZ], [F.pkAxleR, -F.pkWheelZ],
-  ], pickupMat);
+  ], pickupMat, pkTireContactY - 0.06);
   const exhaust = new THREE.Mesh(assets.geometry('trailerRig/exhaust', () => hardenEdges(new THREE.CylinderGeometry(0.045, 0.045, 0.4, 10).rotateZ(Math.PI / 2))), hubMat);
   exhaust.name = 'trailerRig/exhaust';
   exhaust.position.set(-0.1, 0.42, -0.5);
@@ -760,6 +763,7 @@ function buildFenders(
   depth: number,
   spots: readonly (readonly [number, number])[],
   material: THREE.Material,
+  centerY = 0.38,
 ): void {
   const shape = new THREE.Shape();
   shape.moveTo(outerRadius, 0);
@@ -775,7 +779,7 @@ function buildFenders(
   for (const [x, z] of spots) {
     const fender = new THREE.Mesh(geometry, material);
     fender.name = `${name}/${x}/${z}`;
-    fender.position.set(x, 0.38, z);
+    fender.position.set(x, centerY, z);
     fender.castShadow = true;
     host.add(fender);
   }
