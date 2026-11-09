@@ -105,6 +105,12 @@ const DOME_FRAGMENT = /* glsl */ `
     vec3 curr = bandContribution(uBandModeCurr, h, t);
     col += mix(prev, curr, uBandFade);
     gl_FragColor = vec4(col, 1.0);
+    // T45 修复（showcase-1 观感疑点②根因）：线性 uniform（uZenith/uHorizon 经 ColorManagement
+    // 转 linear）直写帧缓冲缺输出转换——linear 被当 sRGB 显示（#ff8e4f 显示为 #ff4514 刺眼橙红、
+    // zenith 端近黑），渐变层次全灭读作均匀色。补线性→sRGB 输出转换（water 原型同款，
+    // toonMaterial.ts WATER_FRAG 同位），authored 渐变/条带按文档色值呈现。NoToneMapping 下
+    // tonemapping_fragment 为恒等，无需插入。
+    #include <colorspace_fragment>
   }
 `;
 

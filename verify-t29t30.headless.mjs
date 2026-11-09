@@ -2,7 +2,7 @@
 // docs/05-时间天气动效.md §4.3.2（四档 GlobalLightParams 定值表 + 六语义通道表）/ §4.4.1（五档定值总表）
 // 逐格数值比对（期望值逐格自文档转写，非自预设文件复制，保证独立核对）。
 // 临时文件（同 temp-t15-t16-smoke.mjs 口径：验收后按清理流程处理，勿提交；只登记不删除）。
-// 运行：node --import "data:text/javascript;base64,<hook>" verify-t29t30.headless.mjs
+// 运行：node verify-t29t30.headless.mjs（2026-11-10 起自带钩子可直接运行；--import 外部钩子口保留兼容）
 //   hook（把 '@/…' 解析到 <cwd>/src/…，Node 24 原生剥除 .ts 类型后直接执行真实源码；inline 钩子须用
 //   同线程的 module.registerHooks()——异步版 module.register() 只收模块标识符、不收内联对象）：
 //   import { registerHooks } from 'node:module';
@@ -18,8 +18,29 @@
 //     },
 //   });
 
-import { timeRegistry } from '@/content/times/registry';
-import { weatherRegistry } from '@/content/weathers/registry';
+// 复跑门槛修复（终审 ⑧）：内置此前仅存在于注释的 inline 钩子 + 静态 import 改动态（ESM 提升
+// 语义下 static import 先于 registerHooks 解析，直跑必 ERR_MODULE_NOT_FOUND）——自此可直接
+// `node verify-t29t30.headless.mjs`（原 --import 外部钩子口仍兼容）。
+import { registerHooks } from 'node:module';
+import { pathToFileURL } from 'node:url';
+registerHooks({
+  resolve(specifier, context, next) {
+    if (specifier.startsWith('@/')) {
+      let p = specifier.slice(2);
+      if (!/\.[cm]?[jt]sx?$/.test(p)) p += '.ts';
+      return next(pathToFileURL(process.cwd() + '/src/' + p).href, context);
+    }
+    if ((specifier.startsWith('./') || specifier.startsWith('../')) && context.parentURL?.includes('/src/')
+      && !/\.[cm]?[jt]sx?$/.test(specifier.split('/').pop() ?? '')) {
+      const base = new URL(specifier, context.parentURL).href;
+      return next(base + '.ts', context);
+    }
+    return next(specifier, context);
+  },
+});
+
+const { timeRegistry } = await import('@/content/times/registry');
+const { weatherRegistry } = await import('@/content/weathers/registry');
 
 let failed = 0;
 let passed = 0;

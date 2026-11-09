@@ -571,6 +571,7 @@ export class Director {
         const preset = this.tryGetWeatherPreset(event.to);
         if (preset) {
           this.appliedWeatherId = preset.id;
+          this.timeLight.setWeatherId(preset.id); // T46 巡游修复：SceneLightState.weather 随切换档更新（场景天气门控依赖，同 setTimeId 口径）
           this.startWeatherTransition(preset);
         }
         break;
@@ -710,6 +711,7 @@ export class Director {
     const weatherPreset = this.tryGetWeatherPreset(next.weather);
     if (weatherPreset) {
       this.appliedWeatherId = weatherPreset.id;
+      this.timeLight.setWeatherId(weatherPreset.id); // T46 巡游修复：装配路径同步登记天气维 id（同 setTimeId 口径）
       this.activeWeatherPreset = weatherPreset;
       this.weatherMaterial.setComponentsInstant(weatherPreset.material);
       this.atmosphere.setWeatherFogMul(weatherPreset.material.fogMul);
@@ -989,6 +991,12 @@ export class Director {
       scope: session.scope,
     };
     this.timeLight.setInteriorHooks(session.module.interiorLightHooks);
+    // 打磨轮次2修复（T46 全组合巡游发现）：场景+车型 600ms FadeSwap 并发时，场景侧
+    // unloadOld→clearRegistrations 会把本车型 stage1 已注册的天气面一并清空，而随后
+    // activateScene 重注册的是「当时的旧车型」面——新车型面自此无人补挂（雪壳/湿深失效
+    // 至下次切换）。此处按 activateScene 同口径补挂；register() 按 material uuid 幂等去重，
+    // 单维车型切换（stage1 已注册）下为 no-op。
+    if (session.surfaces.length > 0) this.weatherMaterial.register(session.surfaces);
     // interiorLightHooks 立即按当前时间档应用（§3.5.3 车型切换路径逐字）
     this.applyLightingNow(this.lastSnapshot.global, this.lastSnapshot.channels, 1);
   }

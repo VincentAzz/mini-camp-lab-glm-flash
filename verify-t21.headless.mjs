@@ -13,6 +13,12 @@ registerHooks({
       if (!/\.[cm]?[jt]sx?$/.test(p)) p += '.ts';
       return next(pathToFileURL(process.cwd() + '/src/' + p).href, context);
     }
+    // 复跑门槛修复（终审 ⑧）：源码内部 bundler 风格相对无扩展名导入补 .ts（同 temp-t21-hook.mjs）
+    if ((specifier.startsWith('./') || specifier.startsWith('../')) && context.parentURL?.includes('/src/')
+      && !/\.[cm]?[jt]sx?$/.test(specifier.split('/').pop() ?? '')) {
+      const base = new URL(specifier, context.parentURL).href;
+      return next(base + '.ts', context);
+    }
     return next(specifier, context);
   },
 });
@@ -72,11 +78,14 @@ class StubAssets {
   releaseGeometry(id) { this.geometries.delete(id); }
   releaseTexture(id) { this.textures.delete(id); }
 }
-import { Rng } from '@/shared/rng';
-import { RhythmClock } from '@/systems/clock';
-import { LightBreathSystem } from '@/systems/lightBreath';
-import { EventScheduler } from '@/systems/scheduler';
-import { WindSystem } from '@/systems/wind';
+// 复跑门槛修复（终审 ⑧）：static import 会先于本文件 registerHooks 解析（ESM 提升语义），
+// 直跑必 ERR_MODULE_NOT_FOUND——改动态 import（钩子就位后解析，@/ 别名可达），脚本自此可直接
+// `node verify-t21.headless.mjs` 运行（原 --import 外部钩子口仍兼容：钩子对已注册别名幂等）。
+const { Rng } = await import('@/shared/rng');
+const { RhythmClock } = await import('@/systems/clock');
+const { LightBreathSystem } = await import('@/systems/lightBreath');
+const { EventScheduler } = await import('@/systems/scheduler');
+const { WindSystem } = await import('@/systems/wind');
 
 let passed = 0;
 let failed = 0;

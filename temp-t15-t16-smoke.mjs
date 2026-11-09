@@ -1,15 +1,34 @@
 // temp-t15-t16-smoke.mjs —— T15/T16 行为冒烟（临时文件，验收后按清理流程处理，勿提交）。
-// 运行：node --import "data:text/javascript;base64,<hook>" temp-t15-t16-smoke.mjs
+// 运行：node temp-t15-t16-smoke.mjs（2026-11-10 起自带钩子可直接运行）
 // （hook 把 '@/…' 解析到 ./src/…，Node 24 原生剥除 .ts 类型后直接执行真实源码，不经构建产物。）
-import {
+// 复跑门槛修复（终审 ⑧）：内置 inline 钩子 + 静态 import 改动态（static import 先于钩子解析，
+// 直跑必 ERR_MODULE_NOT_FOUND）——自此可直接 `node temp-t15-t16-smoke.mjs`。
+import { registerHooks } from 'node:module';
+import { pathToFileURL } from 'node:url';
+registerHooks({
+  resolve(specifier, context, next) {
+    if (specifier.startsWith('@/')) {
+      let p = specifier.slice(2);
+      if (!/\.[cm]?[jt]sx?$/.test(p)) p += '.ts';
+      return next(pathToFileURL(process.cwd() + '/src/' + p).href, context);
+    }
+    if ((specifier.startsWith('./') || specifier.startsWith('../')) && context.parentURL?.includes('/src/')
+      && !/\.[cm]?[jt]sx?$/.test(specifier.split('/').pop() ?? '')) {
+      const base = new URL(specifier, context.parentURL).href;
+      return next(base + '.ts', context);
+    }
+    return next(specifier, context);
+  },
+});
+const {
   EventScheduler, SCHEDULED_EVENT_PRESETS, SCHEDULED_EVENT_PRESET_LIST,
-} from '@/systems/scheduler';
-import {
+} = await import('@/systems/scheduler');
+const {
   OutlineSystem, OUTLINE_WIDTH_TIERS, OUTLINE_WIDTH_MAX, OUTLINE_COLORS,
   pickOutlineColor, splitHardEdgesForOutline,
-} from '@/render/outline';
-import { InstancedGroup } from '@/geom/instanced';
-import * as THREE from 'three';
+} = await import('@/render/outline');
+const { InstancedGroup } = await import('@/geom/instanced');
+const THREE = await import('three');
 
 let failed = 0;
 function check(name, cond, detail = '') {
