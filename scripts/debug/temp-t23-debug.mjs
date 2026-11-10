@@ -11,7 +11,7 @@ const srcRoot = pathToFileURL(path.join(here, 'src')).href;
 registerHooks({
   resolve(specifier, context, next) {
     if (specifier.startsWith('@/')) { let p = specifier.slice(2); if (!/\.[cm]?[jt]sx?$/.test(p)) p += '.ts'; return next(pathToFileURL(path.join(here, 'src', p)).href, context); }
-    if ((specifier.startsWith('./') || specifier.startsWith('../')) && context.parentURL) {
+    if ((specifier.startsWith('./') || specifier.startsWith('../../')) && context.parentURL) {
       const resolved = new URL(specifier, new URL('.', context.parentURL));
       if (!/\.[cm]?[jt]sx?$/.test(resolved.pathname)) return next(new URL(resolved.href + '.ts'), context);
     }

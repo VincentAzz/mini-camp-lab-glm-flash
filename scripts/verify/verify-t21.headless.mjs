@@ -14,7 +14,7 @@ registerHooks({
       return next(pathToFileURL(process.cwd() + '/src/' + p).href, context);
     }
     // 复跑门槛修复（终审 ⑧）：源码内部 bundler 风格相对无扩展名导入补 .ts（同 temp-t21-hook.mjs）
-    if ((specifier.startsWith('./') || specifier.startsWith('../')) && context.parentURL?.includes('/src/')
+    if ((specifier.startsWith('./') || specifier.startsWith('../../')) && context.parentURL?.includes('/src/')
       && !/\.[cm]?[jt]sx?$/.test(specifier.split('/').pop() ?? '')) {
       const base = new URL(specifier, context.parentURL).href;
       return next(base + '.ts', context);

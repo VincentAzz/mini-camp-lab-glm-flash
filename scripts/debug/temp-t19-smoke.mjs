@@ -54,8 +54,8 @@ registerHooks({
       if (!/\.[cm]?[jt]sx?$/.test(p)) p += '.ts';
       return next(pathToFileURL(path.join(here, 'src', p)).href, context);
     }
-    // 源码内相对导入（'./clock'、'../shared/math'）为 extensionless（bundler 解析）——补 .ts
-    if ((specifier.startsWith('./') || specifier.startsWith('../')) && context.parentURL) {
+    // 源码内相对导入（'./clock'、'../../shared/math'）为 extensionless（bundler 解析）——补 .ts
+    if ((specifier.startsWith('./') || specifier.startsWith('../../')) && context.parentURL) {
       const parentDir = new URL('.', context.parentURL);
       const resolved = new URL(specifier, parentDir);
       if (!/\.[cm]?[jt]sx?$/.test(resolved.pathname)) {

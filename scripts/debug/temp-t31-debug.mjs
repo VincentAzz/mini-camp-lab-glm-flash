@@ -22,7 +22,7 @@ globalThis.document = { createElement(tag) {
 registerHooks({ resolve(specifier, context, next) {
   const rc = (b) => /\.[cm]?[jt]sx?$/.test(b) ? b : (existsSync(b + '.ts') ? b + '.ts' : b + '.ts');
   if (specifier.startsWith('@/')) return next(pathToFileURL(rc(path.join(here, 'src', specifier.slice(2)))).href, context);
-  if ((specifier.startsWith('./') || specifier.startsWith('../')) && context.parentURL) {
+  if ((specifier.startsWith('./') || specifier.startsWith('../../')) && context.parentURL) {
     const resolved = new URL(specifier, new URL('.', context.parentURL));
     if (!/\.[cm]?[jt]sx?$/.test(resolved.pathname)) return next(pathToFileURL(rc(fileURLToPath(resolved.href))).href, context);
   }

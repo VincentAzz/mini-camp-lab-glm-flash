@@ -30,7 +30,7 @@ registerHooks({
       if (!/\.[cm]?[jt]sx?$/.test(p)) p += '.ts';
       return next(pathToFileURL(process.cwd() + '/src/' + p).href, context);
     }
-    if ((specifier.startsWith('./') || specifier.startsWith('../')) && context.parentURL?.includes('/src/')
+    if ((specifier.startsWith('./') || specifier.startsWith('../../')) && context.parentURL?.includes('/src/')
       && !/\.[cm]?[jt]sx?$/.test(specifier.split('/').pop() ?? '')) {
       const base = new URL(specifier, context.parentURL).href;
       return next(base + '.ts', context);

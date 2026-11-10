@@ -1,2 +1,5 @@
 node_modules/
 dist/
+
+# 测试截图与探针产物（不入版本库）
+docs/screenshots/

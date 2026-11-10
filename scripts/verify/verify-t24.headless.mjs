@@ -56,7 +56,7 @@ registerHooks({
       if (!/\.[cm]?[jt]sx?$/.test(p)) p += '.ts';
       return next(pathToFileURL(path.join(here, 'src', p)).href, context);
     }
-    if ((specifier.startsWith('./') || specifier.startsWith('../')) && context.parentURL) {
+    if ((specifier.startsWith('./') || specifier.startsWith('../../')) && context.parentURL) {
       const parentDir = new URL('.', context.parentURL);
       const resolved = new URL(specifier, parentDir);
       if (!/\.[cm]?[jt]sx?$/.test(resolved.pathname)) {

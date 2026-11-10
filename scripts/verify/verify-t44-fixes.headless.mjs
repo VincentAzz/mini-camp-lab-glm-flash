@@ -30,7 +30,7 @@ registerHooks({
     if (specifier.startsWith('@/')) {
       return next(pathToFileURL(resolveCandidates(path.join(here, 'src', specifier.slice(2)))).href, context);
     }
-    if ((specifier.startsWith('./') || specifier.startsWith('../')) && context.parentURL) {
+    if ((specifier.startsWith('./') || specifier.startsWith('../../')) && context.parentURL) {
       const parentDir = new URL('.', context.parentURL);
       const resolved = new URL(specifier, parentDir);
       if (!/\.[cm]?[jt]sx?$/.test(resolved.pathname)) {

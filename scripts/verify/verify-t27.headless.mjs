@@ -64,7 +64,7 @@ registerHooks({
       const base = path.join(here, 'src', specifier.slice(2));
       return next(pathToFileURL(resolveCandidates(base)).href, context);
     }
-    if ((specifier.startsWith('./') || specifier.startsWith('../')) && context.parentURL) {
+    if ((specifier.startsWith('./') || specifier.startsWith('../../')) && context.parentURL) {
       const parentDir = new URL('.', context.parentURL);
       const base = fileURLToPath(new URL(specifier, parentDir).href);
       return next(pathToFileURL(resolveCandidates(base)).href, context);

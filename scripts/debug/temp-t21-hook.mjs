@@ -11,7 +11,7 @@ registerHooks({
       return next(pathToFileURL(process.cwd() + '/src/' + p).href, context);
     }
     // 源码内部相对导入（bundler 风格无扩展名）：补 .ts 再交默认解析（three/addons 等裸名不受影响）
-    if ((specifier.startsWith('./') || specifier.startsWith('../')) && context.parentURL?.includes('/src/')
+    if ((specifier.startsWith('./') || specifier.startsWith('../../')) && context.parentURL?.includes('/src/')
       && !/\.[cm]?[jt]sx?$/.test(specifier.split('/').pop() ?? '')) {
       const base = new URL(specifier, context.parentURL).href;
       return next(base + '.ts', context);
