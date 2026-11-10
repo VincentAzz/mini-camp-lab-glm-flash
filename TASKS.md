@@ -162,6 +162,8 @@
 
 ---
 
+| R-P8-5 | 2026-11-11 | P8 / 发布与仓库整理（用户 2026-11-11 授权推送远程+部署 Pages，明示豁免「仅本地提交不推远程」约束） | 九.5（用户豁免）、十.2 | 达成：①仓库整理——docs/screenshots 入 .gitignore 并退出版本库（重写前先 git bundle 全量备份至 C:/Users/Tom/AppData/Local/Temp/mcl-pre-filter-backup.bundle，再以 filter-branch --index-filter 全历史剔除截图 blob：22 笔提交全部保留、hash 重写、截图文件留在磁盘不入库）；测试 mjs 23 个收纳至 scripts/verify（14）/scripts/debug（9）（相对路径 ../→../../ 同步修正）；原始提示词收录 docs/PROMPT.md（外部原件 E:/_AgentSpace/ZCode/mini_camp_lab/A-*.md 保留未动）。②推送远程 master（22 笔）至 https://github.com/VincentAzz/mini-camp-lab-glm-flash 。③GitHub Pages 部署：dist 独立构建推 gh-pages 分支（主仓库历史不动），Pages source=gh-pages，在线地址 https://vincentazz.github.io/mini-camp-lab-glm-flash/ 。④布局约束系统（R-P8-4）随 573db88/28a362b 入库。如实注记：filter-branch 本地残留 refs/original 备份引用与未引用旧对象（不随推送，可 git gc 回收）；Pages 首次构建状态以 gh api 为准 | 均已落库；FPS 实机定夺/第一眼终稿/code-split 等用户决策项不变（§6） |
+
 ## 6. 遗留/待用户确认项跟踪（随任务推进更新）
 
 | # | 事项 | 出处 | 状态 |
