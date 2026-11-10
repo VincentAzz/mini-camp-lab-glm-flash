@@ -33,6 +33,7 @@ import type {
   WindowSpec,
 } from '@/content/vehicles/types';
 import { GLASS_NIGHT_OPACITY, GLASS_OPACITY } from '@/content/vehicles/types';
+import { VEHICLE_BODIES } from '@/content/layout/vehicles'; // 布局约束系统：footprint 字面量同源
 import type { ClothHandle, LampHandle, RGB, SharedAssets, WeatherSurface } from '@/systems/handles';
 import { toonMaterials } from '@/render/toonMaterial';
 import { hardenEdges, lathe, roundedBox, tube } from '@/geom/primitives';
@@ -109,8 +110,9 @@ const LAMPS = { authored: 1.4, ledGain: 0.9, ledPeriod: 2.5, ledStagger: 0.4, le
 /** 车内暖光点光（draft §7.4：位驾驶舱后 (0.6,1.5,0)、distance 4；docs/03 §4.2.0 模板强度 1.15×power×emphasis）。 */
 const FILL_LIGHT = { position: [0.6, 1.5, 0], color: COLORS.warmLight, distance: 4.0, decay: 1.8, gain: 1.15 } as const;
 
-/** footprint（docs/03 §4.2.5：5.2×2.3 车体计；帐篷外伸视觉包络见文件头裁定④）。 */
-const FOOTPRINT = { length: 5.2, width: 2.3, track: F.wheelZ * 2, height: 2.75 } as const;
+/** footprint（docs/03 §4.2.5：5.2×2.3 车体计；帐篷外伸视觉包络见文件头裁定④）。
+ *  布局约束系统（本轮）：length/width 同源引用 content/layout/vehicles.ts（车身字面量唯一来源）。 */
+const FOOTPRINT = { length: VEHICLE_BODIES.overlandTruck.length, width: VEHICLE_BODIES.overlandTruck.width, track: F.wheelZ * 2, height: 2.75 } as const;
 
 /** PaintSpec（军绿基色+橙警示条 v 区间按车身 y 0.92..2.02 换算：(y−0.92)/1.10）。 */
 const STRIPE_SPEC: readonly PaintStripe[] = [{ color: COLORS.hazard, from: 0.355, to: 0.4 }];

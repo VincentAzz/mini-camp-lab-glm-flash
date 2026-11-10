@@ -34,6 +34,7 @@ import type {
   WindowSpec,
 } from '@/content/vehicles/types';
 import { GLASS_NIGHT_OPACITY, GLASS_OPACITY } from '@/content/vehicles/types';
+import { VEHICLE_BODIES } from '@/content/layout/vehicles'; // 布局约束系统：footprint 字面量同源
 import type { ClothHandle, LampHandle, RGB, SharedAssets, WeatherSurface } from '@/systems/handles';
 import { toonMaterials } from '@/render/toonMaterial';
 import { hardenEdges, lathe, mergeGeometries, roundedBox, tube } from '@/geom/primitives';
@@ -124,8 +125,9 @@ const LAMPS = {
 /** 车内暖光点光（draft 12 §6.4：位 (−0.6,1.5,0)、distance 4.5 小车厢光域更聚；强度 1.15×power×emphasis）。 */
 const FILL_LIGHT = { position: [-0.6, 1.5, 0], color: COLORS.fillLight, distance: 4.5, decay: 1.8, gain: 1.15 } as const;
 
-/** footprint（docs/03 §4.2.4：4.7×2.2 外接半径 2.7 五车最小；实算 hypot(2.35,1.1)≈2.60 ≤4.2★）。 */
-const FOOTPRINT = { length: 4.7, width: 2.2, track: F.wheelZ * 2, height: 2.9 } as const;
+/** footprint（docs/03 §4.2.4：4.7×2.2 外接半径 2.7 五车最小；实算 hypot(2.35,1.1)≈2.60 ≤4.2★）。
+ *  布局约束系统（本轮）：length/width 同源引用 content/layout/vehicles.ts（车身字面量唯一来源）。 */
+const FOOTPRINT = { length: VEHICLE_BODIES.classB.length, width: VEHICLE_BODIES.classB.width, track: F.wheelZ * 2, height: 2.9 } as const;
 
 /** 16 个 named 键（docs/03 §4.2.4 键表 15 键 + 裁定① ceilLamp 补位=16）。 */
 const NAMED_KEYS = [

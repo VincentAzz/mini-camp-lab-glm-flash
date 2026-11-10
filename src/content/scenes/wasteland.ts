@@ -43,6 +43,23 @@ import { createPurifierGenerator, createSolarArray, createRadarDish } from '@/ge
 import { createBarrelGrill, createClothesline, createCityWindows } from '@/geom/parts/wasteland/living';
 import { paintCanvasTexture, drawOilStain, drawSandPatch, drawPuddle } from '@/geom/parts/wasteland/texPaint';
 import { clamp } from '@/shared/math';
+import { layoutGrid } from '@/core/layout';
+import {
+  BARREL_GRILL_POS,
+  BARREL_SIGN_POS,
+  CLOTHESLINE_POS,
+  CLOTHESLINE_ROT_Y,
+  CRATE_POS,
+  PURIFIER_POS,
+  RADAR_POS,
+  SOLAR_POS,
+  SOLAR_ROT_Y,
+  TIRE_PYRAMID_POS,
+  WASTELAND_CAMP_POS,
+  WASTELAND_ITEMS,
+  WASTELAND_SCENE_ID,
+  WRECK_POS,
+} from '@/content/layout/scenes/wasteland';
 
 /* ============================== 场景定值（docs/02 §4.1.3 / docs/05 §7.2.3） ============================== */
 
@@ -349,19 +366,20 @@ function buildProps(ctx: SceneBuildContext): SceneProps {
   const wreck = createWreck(assets, 'wasteland/wreck');
   wreck.group.name = 'wasteland/wreck';
   // 穿模修复（clip-evidence）：残骸车尾原位戳入 A 型车头 fascia/skirt（嵌入约 1/3），沿径向外挪 0.6
-  wreck.group.position.set(6.75, 0, 2.1);
+  // 布局约束系统（本轮）：位置常量改引 content/layout/scenes/wasteland.ts 单一来源（WRECK_POS 同值）
+  wreck.group.position.set(WRECK_POS.x, 0, WRECK_POS.z);
   wreck.group.rotation.y = 0.55;
   group.add(wreck.group);
   const tires = createTirePyramid(assets, 'wasteland/tire-pyramid', wreck.tireMaterial);
   tires.group.name = 'wasteland/tire-pyramid';
-  tires.group.position.set(7.3, 0, 0.4);
+  tires.group.position.set(TIRE_PYRAMID_POS.x, 0, TIRE_PYRAMID_POS.z);
   tires.group.rotation.y = 0.3;
   group.add(tires.group);
   // 残骸顶雪壳（roofTop——五-5「残骸顶」）
   const wreckSnow = new THREE.Mesh(
     assets.geometry('wasteland/snow-wreck', () => {
-      const roof = new THREE.BoxGeometry(1.7, 0.04, 1.66).rotateY(0.55).translate(6.75, wreck.roofY + 0.04, 2.1);
-      const hood = new THREE.BoxGeometry(1.0, 0.04, 1.6).rotateY(0.55).translate(7.32, 0.9, 2.36);
+      const roof = new THREE.BoxGeometry(1.7, 0.04, 1.66).rotateY(0.55).translate(WRECK_POS.x, wreck.roofY + 0.04, WRECK_POS.z);
+      const hood = new THREE.BoxGeometry(1.0, 0.04, 1.6).rotateY(0.55).translate(WRECK_POS.x + 0.57, 0.9, WRECK_POS.z + 0.26);
       const merged = mergeGeometries([roof, hood]);
       if (!merged) throw new Error('[wasteland] 残骸顶雪壳合并失败');
       return merged;
@@ -375,7 +393,7 @@ function buildProps(ctx: SceneBuildContext): SceneProps {
   surfaces.push({ material: wreck.material, kind: 'roofTop', snowShell: wreckSnow });
   // 轮胎堆顶（同 tireMaterial 面）
   const tireSnow = new THREE.Mesh(
-    assets.geometry('wasteland/snow-tires', () => new THREE.CylinderGeometry(0.52, 0.56, 0.05, 10).translate(7.3, tires.topY + 0.03, 0.4)),
+    assets.geometry('wasteland/snow-tires', () => new THREE.CylinderGeometry(0.52, 0.56, 0.05, 10).translate(TIRE_PYRAMID_POS.x, tires.topY + 0.03, TIRE_PYRAMID_POS.z)),
     snowShellMaterial,
   );
   tireSnow.name = 'wasteland/snow-tires';
@@ -387,15 +405,17 @@ function buildProps(ctx: SceneBuildContext): SceneProps {
   /* — ⑦ 油桶+手写警示牌（立3倒1；白底红字手写；无骷髅——一·5；板微歪 4°）— */
   const barrelSign = createBarrelSign(assets, 'wasteland/barrel-sign');
   barrelSign.group.name = 'wasteland/barrel-sign';
-  barrelSign.group.position.set(-5.7, 0, 3.35);
+  // 布局约束系统重排（本轮）：旧位 (−5.7,3.35) 与晾衣绳新位错开 → 门口西翼南侧草坪
+  barrelSign.group.position.set(BARREL_SIGN_POS.x, 0, BARREL_SIGN_POS.z);
   barrelSign.group.rotation.y = 0.6;
   group.add(barrelSign.group);
 
   /* — ⑧ 净水装置+发电机（滤瓶 blink 2.4s 青 + 蒸汽 EmitterSpec steam 常转 base 1.5/s）— */
   const purifier = createPurifierGenerator(assets, 'wasteland/purifier', CHANNELS.cyanGlow);
   purifier.group.name = 'wasteland/purifier';
-  // 穿模修复（clip-evidence）：原位处于 C 型滑出舱外伸包络/B 型尾门板范围内，沿营位左后向外挪（−0.7,−0.7）
-  purifier.group.position.set(-3.05, 0, -3.45);
+  // 布局约束系统重排（本轮）：旧位 (−3.05,−3.45) 与 B型尾门 0.017/C型滑出舱 0.021 贴面（复验实测）→
+  // 左院西北角新位，距 5 车型包络 ≥0.18、与太阳能阵列净距 1.03
+  purifier.group.position.set(PURIFIER_POS.x, 0, PURIFIER_POS.z);
   purifier.group.rotation.y = 0.5;
   group.add(purifier.group);
   const ledLamp: LampHandle = {
@@ -411,8 +431,10 @@ function buildProps(ctx: SceneBuildContext): SceneProps {
   /* — ⑨ 太阳能板阵列 ×4（倾角 28°，实例化，板面 roofTop）— */
   const solar = createSolarArray(assets, 'wasteland/solar');
   solar.group.name = 'wasteland/solar';
-  solar.group.position.set(-4.7, 0, -4.6);
-  solar.group.rotation.y = 0.12;
+  // 布局约束系统重排（本轮）：旧位 (−4.7,−4.6) rot 0.12 在包络带内 → 左墙内侧 N-S 纵列
+  // （rot π/2 避开探照塔/集装箱 A/铁丝网；雪壳随之）
+  solar.group.position.set(SOLAR_POS.x, 0, SOLAR_POS.z);
+  solar.group.rotation.y = SOLAR_ROT_Y;
   group.add(solar.group);
   const solarSnow = new THREE.Mesh(
     assets.geometry('wasteland/snow-solar', () => {
@@ -431,8 +453,8 @@ function buildProps(ctx: SceneBuildContext): SceneProps {
     }),
     snowShellMaterial,
   );
-  solarSnow.rotation.y = 0.12; // 随阵列组同向（挂场景层，位置/yaw 对齐阵列组）
-  solarSnow.position.set(-4.7, 0, -4.6);
+  solarSnow.rotation.y = SOLAR_ROT_Y; // 随阵列组同向（挂场景层，位置/yaw 对齐阵列组）
+  solarSnow.position.set(SOLAR_POS.x, 0, SOLAR_POS.z);
   solarSnow.name = 'wasteland/snow-solar';
   solarSnow.userData.noOutline = true;
   solarSnow.visible = false;
@@ -442,7 +464,7 @@ function buildProps(ctx: SceneBuildContext): SceneProps {
   /* — ⑩ 旋转雷达天线（Lathe 抛物面+背筋+馈源；LampHandle blink 1.2s；named radar）— */
   const radar = createRadarDish(assets, 'wasteland/radar');
   radar.group.name = 'wasteland/radar';
-  radar.group.position.set(6.9, 0, -5.7);
+  radar.group.position.set(RADAR_POS.x, 0, RADAR_POS.z);
   radar.group.rotation.y = -0.5;
   group.add(radar.group);
   propsRef.radarRotor = radar.rotor;
@@ -460,8 +482,8 @@ function buildProps(ctx: SceneBuildContext): SceneProps {
   /* — ⑪ 油桶改造烧烤架火堆（campfire 变体；火光点光 P3 归点光池，场景交 emberPower）— */
   const grill = createBarrelGrill(assets, 'wasteland/grill');
   grill.group.name = 'wasteland/grill';
-  // 穿模修复（clip-evidence）：油桶烤炉原位被拖挂皮卡左前轮扫入，沿切向外挪（+0.1,+0.7）脱离轮/翼子板包络
-  grill.group.position.set(2.45, 0, 3.15);
+  // 布局约束系统重排（本轮）：旧位 (2.45,3.15) 与拖挂皮卡左前轮带 0.26 贴线 → 门口东翼南侧草坪
+  grill.group.position.set(BARREL_GRILL_POS.x, 0, BARREL_GRILL_POS.z);
   grill.group.rotation.y = -0.35;
   group.add(grill.group);
   propsRef.coalMaterial = grill.coalMaterial;
@@ -469,8 +491,9 @@ function buildProps(ctx: SceneBuildContext): SceneProps {
   /* — ⑫ 晾衣绳工装 ×3（ClothHandle ×3，stiffness 0.45 / windFactor 1.0 / sagAmp 0.02）— */
   const clothesline = createClothesline(assets, 'wasteland/clothesline', 3.4);
   clothesline.group.name = 'wasteland/clothesline';
-  clothesline.group.position.set(-5.9, 0, 0.35);
-  clothesline.group.rotation.y = 0.2;
+  // 布局约束系统重排（本轮）：旧位 (−5.9,0.35) rot 0.2 距包络线 0.28 不足 → 左墙内侧 N-S 张紧（rot π/2）
+  clothesline.group.position.set(CLOTHESLINE_POS.x, 0, CLOTHESLINE_POS.z);
+  clothesline.group.rotation.y = CLOTHESLINE_ROT_Y;
   group.add(clothesline.group);
   for (const cloth of clothesline.cloths) cloths.push(cloth);
 
@@ -497,13 +520,13 @@ function buildProps(ctx: SceneBuildContext): SceneProps {
   dewSparkles.renderOrder = 20;
   dewSparkles.userData.noOutline = true;
   const dewObj = new THREE.Object3D();
-  const cosL = Math.cos(0.2);
-  const sinL = Math.sin(0.2);
+  const cosL = Math.cos(CLOTHESLINE_ROT_Y);
+  const sinL = Math.sin(CLOTHESLINE_ROT_Y);
   for (let i = 0; i < 30; i++) {
     const lx = -1.5 + rng.next() * 3.0;
     const lz = (rng.next() - 0.5) * 0.9;
-    // 绳局部系（绳沿局部 x）→ 世界系（绳组位 (−5.9,0.35) rotY 0.2 同变换）
-    dewObj.position.set(-5.9 + lx * cosL + lz * sinL, 1.15 + rng.next() * 0.45, 0.35 - lx * sinL + lz * cosL);
+    // 绳局部系（绳沿局部 x）→ 世界系（绳组位/朝向与 clothesline 组同源：CLOTHESLINE_POS/ROT_Y）
+    dewObj.position.set(CLOTHESLINE_POS.x + lx * cosL + lz * sinL, 1.15 + rng.next() * 0.45, CLOTHESLINE_POS.z - lx * sinL + lz * cosL);
     dewObj.rotation.set(-Math.PI / 2 + 0.2, 0, rng.next() * Math.PI);
     dewObj.scale.setScalar(0.6 + rng.next() * 0.8);
     dewObj.updateMatrix();
@@ -535,13 +558,14 @@ function buildProps(ctx: SceneBuildContext): SceneProps {
     toonMaterials.get('wood', { color: '#8a6f4d', name: 'wasteland/crate' }),
   );
   crate.name = 'wasteland/crate';
-  crate.position.set(0.5, 0, 2.9);
+  // 布局约束系统重排（本轮）：旧位 (0.5,2.9) 深居车辆包络带 → 左院后段（净化器群落旁）
+  crate.position.set(CRATE_POS.x, 0, CRATE_POS.z);
   crate.rotation.y = 0.35;
   crate.castShadow = true;
   group.add(crate);
   const tablewareSet = buildCampTableware(assets);
   tablewareSet.name = 'wasteland/tableware';
-  tablewareSet.position.set(0.5, 0.56, 2.9);
+  tablewareSet.position.set(CRATE_POS.x, 0.56, CRATE_POS.z);
   tablewareSet.rotation.y = 0.35;
   tablewareSet.visible = false;
   group.add(tablewareSet);
@@ -625,6 +649,9 @@ function buildProps(ctx: SceneBuildContext): SceneProps {
     opacity: 0.5,
     additive: false,
   });
+
+  // 布局约束系统：占位登记（位置常量单一来源 = content/layout/scenes/wasteland.ts）
+  layoutGrid.register(WASTELAND_SCENE_ID, WASTELAND_ITEMS, WASTELAND_CAMP_POS);
 
   return {
     group,

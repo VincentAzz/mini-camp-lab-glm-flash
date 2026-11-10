@@ -56,6 +56,29 @@ import { createGrill } from '@/geom/parts/campfire';
 import { createFbm2D, hashStringToSeed } from '@/tex/canvasTex';
 import { mulberry32, hashString } from '@/shared/rng';
 import { clamp } from '@/shared/math';
+import { layoutGrid } from '@/core/layout';
+import {
+  BICYCLE_POS,
+  BREAKFAST_POS,
+  CAMP_LAMP_POS,
+  DOORMAT_POS,
+  FOLD_CHAIR_POS_E,
+  FOLD_CHAIR_POS_W,
+  FOLD_TABLE_POS,
+  GRILL_POS,
+  HOSE_POINTS,
+  HOSE_REEL_POS,
+  PICNIC_MAT_POS,
+  SEA_CLIFF_CAMP_POS,
+  SEA_CLIFF_ITEMS,
+  SEA_CLIFF_SCENE_ID,
+  SIGN_POS,
+  TARP_ROOT,
+  TARP_ROT_Y,
+  TOWEL_POS,
+  UTILITY_POST_POS,
+  VIEW_BENCH_POS,
+} from '@/content/layout/scenes/seacliff';
 
 /* ============================== 场景定值（docs/02 §4.1.1） ============================== */
 
@@ -518,8 +541,10 @@ function buildProps(ctx: SceneBuildContext): SceneProps {
   });
   const tarpRoot = new THREE.Group();
   tarpRoot.name = 'seacliff/tarp-root';
-  tarpRoot.position.set(-1.7, y, 1.35);
-  tarpRoot.rotation.y = 0.12;
+  // 布局约束系统重排（本轮）：旧根 (−1.7,1.35) 深入营位（杆系/拉绳穿车体）→ 西南草坪新根，
+  // 全部杆位与拉绳桩距 5 车型包络 ≥0.25（layoutGrid.verify + check:layout 实证）。
+  tarpRoot.position.set(TARP_ROOT.x, y, TARP_ROOT.z);
+  tarpRoot.rotation.y = TARP_ROT_Y;
   tarp.mesh.position.y = 1.62;
   tarpRoot.add(tarp.mesh);
   group.add(tarpRoot);
@@ -574,27 +599,32 @@ function buildProps(ctx: SceneBuildContext): SceneProps {
 
   const table = createFoldTable({ assets, id: 'foldTable/camp' });
   table.name = 'seacliff/fold-table';
-  // 穿模修复（clip-evidence）：折叠桌框原位被 A 型底盘 AABB 扫入，外挪至野餐垫后缘
-  table.position.set(-1.7, y, 3.9);
+  // 布局约束系统重排（本轮）：随天幕组合迁至西南草坪（天幕遮蔽下，构图意图保持）
+  table.position.set(FOLD_TABLE_POS.x, y, FOLD_TABLE_POS.z);
   table.rotation.y = 0.12;
   group.add(table);
   const chairs = createFoldChairSet({
     assets,
     name: 'seacliff/fold-chairs',
     fabricColor: '#6a8aa8',
-    // 穿模修复（clip-evidence）：椅背原位戳入 C 型侧裙/越野后轮区，外挪至野餐垫两侧
+    // 布局约束系统重排（本轮）：折叠椅随桌迁至天幕两侧（rot 原值保留）
     placements: [
-      { position: [-2.85, y, 3.7], rotY: -0.55 },
-      { position: [-1.3, y, 3.7], rotY: 0.5 },
+      { position: [FOLD_CHAIR_POS_W.x, y, FOLD_CHAIR_POS_W.z], rotY: -0.55 },
+      { position: [FOLD_CHAIR_POS_E.x, y, FOLD_CHAIR_POS_E.z], rotY: 0.5 },
     ],
   });
   group.add(chairs);
 
   /* — ② 串灯（CatmullRom 悬链 3 段 + 14 泡实例化 + halo 成对 2 DC；LampHandle blink 3s/0.3/0.4rad）— */
-  const anchorA = new THREE.Vector3(-3.2, y + 1.72, 1.35); // 天幕左后杆顶（世界系）
-  const anchorB = new THREE.Vector3(-0.25, y + 1.5, 2.55); // 天幕左前杆顶
-  const anchorC = new THREE.Vector3(2.7, y + 1.72, 1.35); // 天幕右后杆顶
-  const anchorD = new THREE.Vector3(-2.75, y + 1.44, 2.3); // 营地灯挂臂端
+  // 锚点随天幕组合（布局约束系统重排后按新根+rot 实算杆顶；D=营地灯挂臂端——灯随迁天幕前缘）
+  const tarpCos = Math.cos(TARP_ROT_Y);
+  const tarpSin = Math.sin(TARP_ROT_Y);
+  const poleTopWorld = (lx: number, lz: number, h: number): THREE.Vector3 =>
+    new THREE.Vector3(TARP_ROOT.x + lx * tarpCos + lz * tarpSin, y + h, TARP_ROOT.z - lx * tarpSin + lz * tarpCos);
+  const anchorA = poleTopWorld(-1.5, -1.2, 1.72); // 天幕左后杆顶
+  const anchorB = poleTopWorld(-1.5, 1.2, 1.5); // 天幕左前杆顶
+  const anchorC = poleTopWorld(1.5, -1.2, 1.72); // 天幕右后杆顶
+  const anchorD = new THREE.Vector3(CAMP_LAMP_POS.x + 0.45, y + 1.44, CAMP_LAMP_POS.z); // 营地灯挂臂端
   const strandCurves = [
     new THREE.CatmullRomCurve3([anchorA, anchorA.clone().lerp(anchorD, 0.5).add(new THREE.Vector3(0, -0.22, 0)), anchorD]),
     new THREE.CatmullRomCurve3([anchorD, anchorD.clone().lerp(anchorB, 0.5).add(new THREE.Vector3(0, -0.2, 0)), anchorB]),
@@ -666,8 +696,8 @@ function buildProps(ctx: SceneBuildContext): SceneProps {
   /* — ③ 烧烤炉（Lathe 烤碗+盖+3 腿+炭；炊烟 EmitterSpec steam）— */
   const grill = createGrill({ assets, id: 'campfire/grill-seacliff' });
   grill.group.name = 'seacliff/grill';
-  // 穿模修复（clip-evidence）：原 (1.35,1.5) 被长车前轮带扫入（A/C/拖挂/越野组合轮区），沿切向外挪至营地后缘
-  grill.group.position.set(1.35, y, 4.45);
+  // 布局约束系统重排（本轮）：旧位 (1.35,4.45) 在车辆包络带内 → 野餐垫西侧草坪
+  grill.group.position.set(GRILL_POS.x, y, GRILL_POS.z);
   grill.group.rotation.y = -0.4;
   group.add(grill.group);
   propsRef.coalMaterial = grill.coalMaterial;
@@ -696,7 +726,8 @@ function buildProps(ctx: SceneBuildContext): SceneProps {
     matMaterial,
   );
   matMesh.name = 'seacliff/picnic-mat';
-  matMesh.position.set(-1.7, y + 0.012, 3.15);
+  // 布局约束系统重排（本轮）：旧位 (−1.7,3.15) 在车辆包络带内 → 营地灯东南草坪（露水 sparkle 随迁）
+  matMesh.position.set(PICNIC_MAT_POS.x, y + 0.012, PICNIC_MAT_POS.z);
   matMesh.rotation.y = 0.12;
   matMesh.receiveShadow = true;
   group.add(matMesh);
@@ -725,7 +756,7 @@ function buildProps(ctx: SceneBuildContext): SceneProps {
     doubleSided: true,
   });
   towel.mesh.rotation.set(-Math.PI / 2, 0, 0.5);
-  towel.mesh.position.set(-2.5, y + 0.035, 3.0);
+  towel.mesh.position.set(TOWEL_POS.x, y + 0.035, TOWEL_POS.z);
   group.add(towel.mesh);
   cloths.push(towel.handle);
   propsRef.towelMesh = towel.mesh;
@@ -733,7 +764,8 @@ function buildProps(ctx: SceneBuildContext): SceneProps {
   // 早餐餐具 breakfastSet（J4 主展示位：盘×2+杯×2+壶；docs/05 §4.3.3-③ Lathe 一套，仅 dawn 出现）
   const breakfastSet = buildBreakfastSet(assets);
   breakfastSet.name = 'seacliff/breakfast-set';
-  breakfastSet.position.set(-1.7, y + 0.665, 1.35);
+  // 布局约束系统重排（本轮）：旧位 (−1.7,1.35) 为天幕迁址前滞留点 → 桌面（FOLD_TABLE_POS，台面高 0.665）
+  breakfastSet.position.set(BREAKFAST_POS.x, y + 0.665, BREAKFAST_POS.z);
   breakfastSet.rotation.y = 0.12;
   breakfastSet.visible = false;
   group.add(breakfastSet);
@@ -743,7 +775,8 @@ function buildProps(ctx: SceneBuildContext): SceneProps {
   /* — ⑤ 小营地灯（Lathe 灯笼罩+emissive 内芯；breath 1.5s depth 0.55；castReflection）— */
   const lampRoot = new THREE.Group();
   lampRoot.name = 'seacliff/camp-lamp';
-  lampRoot.position.set(-3.2, y, 2.3);
+  // 布局约束系统重排（本轮）：随天幕组合迁至天幕前缘（串灯 D 锚=挂臂端）
+  lampRoot.position.set(CAMP_LAMP_POS.x, y, CAMP_LAMP_POS.z);
   const lampPole = new THREE.Mesh(
     assets.geometry('seacliff/camp-lamp-pole', () => {
       const pole = new THREE.CylinderGeometry(0.024, 0.03, 1.5, 8);
@@ -822,7 +855,8 @@ function buildProps(ctx: SceneBuildContext): SceneProps {
     doormatMaterial,
   );
   doormat.name = 'seacliff/doormat';
-  doormat.position.set(0.35, y, 2.75);
+  // 布局约束系统重排（本轮）：旧位 (0.35,2.75) 深入车辆包络带（复验实测与越野遮阳幕支臂 0.06 贴面）→ 营位南侧草坪
+  doormat.position.set(DOORMAT_POS.x, y, DOORMAT_POS.z);
   doormat.rotation.y = 0.15;
   doormat.castShadow = true;
   doormat.receiveShadow = true;
@@ -832,7 +866,8 @@ function buildProps(ctx: SceneBuildContext): SceneProps {
   /* — ⑦ 水电桩与管线（桩+卷盘+Tube 管线；J8 止于营位边缘地环不接触车型）— */
   const utilityPost = new THREE.Group();
   utilityPost.name = 'seacliff/utility-post';
-  utilityPost.position.set(3.3, y, 0.35);
+  // 布局约束系统重排（本轮）：旧位 (3.3,0.35) 位于车辆包络带内（复验实测桩体被 A型/拖挂车身包络吞没）→ 东草坪
+  utilityPost.position.set(UTILITY_POST_POS.x, y, UTILITY_POST_POS.z);
   utilityPost.rotation.y = -0.2;
   const postBody = new THREE.Mesh(
     assets.geometry('seacliff/utility-body', () => {
@@ -863,19 +898,14 @@ function buildProps(ctx: SceneBuildContext): SceneProps {
   group.add(utilityPost);
   const reel = createHoseReel({ assets, id: 'gardenHose/seacliff' });
   reel.name = 'seacliff/hose-reel';
-  reel.position.set(3.06, y, 0.62);
+  reel.position.set(HOSE_REEL_POS.x, y, HOSE_REEL_POS.z);
   reel.rotation.y = 2.6;
   group.add(reel);
   const hose = createHoseRun({
     assets,
     id: 'gardenHose/seacliff-run',
-    // 穿模修复（clip-evidence）：原走线横穿 A 型/拖挂皮卡左前轮区，改为短距盘卷在水电桩旁（贴卷盘垂落）
-    points: [
-      new THREE.Vector3(2.98, y + 0.15, 0.4),
-      new THREE.Vector3(2.85, y + 0.06, 0.15),
-      new THREE.Vector3(2.7, y + 0.04, -0.15),
-      new THREE.Vector3(2.52, y + 0.03, -0.42),
-    ],
+    // 布局约束系统重排（本轮）：走线随水电桩群迁至东草坪（y 抬升剖面原值保留；HOSE_POINTS 同源）
+    points: HOSE_POINTS.map((p, i) => new THREE.Vector3(p.x, y + [0.15, 0.06, 0.04, 0.03][i]!, p.z)),
     radius: 0.028,
   });
   hose.name = 'seacliff/hose-run';
@@ -884,8 +914,8 @@ function buildProps(ctx: SceneBuildContext): SceneProps {
   /* — ⑧ 小型折叠自行车（bicycle 部件，车型章 3.2/3.3 复用）— */
   const bicycle = createFoldBicycle({ assets, id: 'bicycle/seacliff', frameColor: '#3f6fa8' });
   bicycle.name = 'seacliff/bicycle';
-  // 穿模修复（clip-evidence）：原位倾靠 C 型/A 型/皮卡前保险杠，外挪至水电桩前净区（z 再南移避开皮卡前杠角）
-  bicycle.position.set(4.6, y, -1.0);
+  // 布局约束系统重排（本轮）：旧位 (4.6,−1.0) 与 A 型前杠 0.146 贴面且落小海湾水线边 → 湾沙台东北草坪
+  bicycle.position.set(BICYCLE_POS.x, y, BICYCLE_POS.z);
   bicycle.rotation.y = 1.15;
   group.add(bicycle);
 
@@ -969,7 +999,8 @@ function buildProps(ctx: SceneBuildContext): SceneProps {
   /* — ⑪ 观景长椅（benchSlat，面海放置）— */
   const bench = createBench({ assets, id: 'benchSlat/seacliff-view', withBackrest: true, slatColor: '#a8825c' });
   bench.name = 'seacliff/view-bench';
-  bench.position.set(-2.4, y, -3.15);
+  // 布局约束系统重排（本轮）：崖缘西段外移（面海朝向不变，距护栏留步道）
+  bench.position.set(VIEW_BENCH_POS.x, y, VIEW_BENCH_POS.z);
   bench.rotation.y = 0.18;
   group.add(bench);
 
@@ -984,7 +1015,8 @@ function buildProps(ctx: SceneBuildContext): SceneProps {
     postHeight: 1.4,
   });
   sign.name = 'seacliff/sign';
-  sign.position.set(3.0, y, -2.95);
+  // 布局约束系统重排（本轮）：旧位 (3.0,−2.95) 贴车辆包络线 → 东草坪石阶口北侧
+  sign.position.set(SIGN_POS.x, y, SIGN_POS.z);
   sign.rotation.y = -0.45;
   group.add(sign);
 
@@ -1124,10 +1156,11 @@ function buildProps(ctx: SceneBuildContext): SceneProps {
   sparkles.userData.noOutline = true;
   for (let i = 0; i < 52; i++) {
     const onMat = i < 16;
+    // 垫面露水随野餐垫（PICNIC_MAT_POS 同源；散布域偏移原值保留）
     tmpObj.position.set(
-      onMat ? -1.7 + (rng.next() - 0.5) * 1.8 : -6 + rng.next() * 10,
+      onMat ? PICNIC_MAT_POS.x + (rng.next() - 0.5) * 1.8 : -6 + rng.next() * 10,
       onMat ? y + 0.035 : y + 0.022,
-      onMat ? 3.15 + (rng.next() - 0.5) * 1.3 : -1 + rng.next() * 6,
+      onMat ? PICNIC_MAT_POS.z + (rng.next() - 0.5) * 1.3 : -1 + rng.next() * 6,
     );
     tmpObj.rotation.set(-Math.PI / 2 + 0.2, 0, rng.next() * Math.PI);
     tmpObj.scale.setScalar(0.6 + rng.next() * 0.8);
@@ -1163,6 +1196,10 @@ function buildProps(ctx: SceneBuildContext): SceneProps {
   groundGlow.userData.noOutline = true;
   group.add(groundGlow);
   propsRef.groundGlowMaterial = groundGlowMaterial;
+
+  // 布局约束系统：占位登记（位置常量单一来源 = content/layout/scenes/seacliff.ts；
+  // Director（DEV）与 scripts/check-layout.mjs 共用此表校验——core/layout.ts 文件头数据流）
+  layoutGrid.register(SEA_CLIFF_SCENE_ID, SEA_CLIFF_ITEMS, SEA_CLIFF_CAMP_POS);
 
   return { group, named: { sailboat: propsRef.sailboat!, breakfastSet }, cloths, lamps, emitters, weatherSurfaces: surfaces };
 }

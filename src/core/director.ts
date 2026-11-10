@@ -37,6 +37,7 @@ import { EventScheduler } from '@/systems/scheduler';
 import { OutlineSystem } from '@/render/outline';
 import { SkySystem, type SkyFrame } from '@/render/sky';
 import { sharedUniforms } from '@/render/toonMaterial';
+import { layoutGrid, type LayoutViolation } from '@/core/layout';
 import type {
   ClothHandle,
   GlobalLightParams,
@@ -301,6 +302,9 @@ export interface DirectorOptions {
 
 /** 风力基准幅（docs/05 §7.1.2「风力目标值=基准幅×weatherPreset.windMul」；wind.ts 初始 target 1.0 同口径）。 */
 const WIND_BASE_POWER = 1.0;
+
+/** DEV 运行旗标（vite 注入 import.meta.env；无头 node 验证环境无 env → 视为非 DEV，verify 静默）。 */
+const IS_DEV: boolean = typeof import.meta.env === 'object' && import.meta.env !== null && import.meta.env.DEV === true;
 
 /**
  * ★ Director（§3.5 总控）：内容装配/卸载编排 + 四维切换路径 + 每帧阶段接线。
@@ -720,6 +724,33 @@ export class Director {
       this.particles.setWeatherSet(this.liftedWeatherEntries(weatherPreset)); // T33：同 startWeatherTransition
       this.setLightModNow(weatherPreset.lightMod);
     }
+    // 布局约束系统（DEV）：装配完成后跑 verify——场景占位表由 buildProps register，
+    // 车型包络表由组装点（main.ts / check 脚本）注入；违规只 console.error 不阻断渲染。
+    if (IS_DEV) this.verifyLayoutDev(next.scene);
+  }
+
+  /**
+   * 布局约束校验（DEV 专用）：当前场景 × 全部车型包络全矩阵（布局为静态数据，逐车型枚举
+   * 等价覆盖后续车型切换）；违规明细 console.error（规则见 core/layout.ts 文件头）。
+   */
+  private verifyLayoutDev(sceneId: string): void {
+    let count = 0;
+    for (const vehicle of this.vehicleRegistry.list()) {
+      const violations = layoutGrid.verify(sceneId, vehicle.id);
+      if (violations.length === 0) continue;
+      count += violations.length;
+      console.error(`[layout] ${sceneId} × ${vehicle.id} 布局违规 ${violations.length} 处：`);
+      for (const v of violations) this.reportLayoutViolation(v);
+    }
+    if (count === 0) {
+      console.info(`[layout] ${sceneId} 布局校验全绿（${layoutGrid.envelopeCount} 车型包络 × ${layoutGrid.itemsOf(sceneId).length} 占位）`);
+    }
+  }
+
+  /** 违规明细行（check:layout 表格式同源）。 */
+  private reportLayoutViolation(v: LayoutViolation): void {
+    const pair = v.type === 'vehicle-prop' ? `${v.bId} ↔ ${v.aId}(包络)` : `${v.aId} ↔ ${v.bId}`;
+    console.error(`[layout]   ${v.type} ${pair}：净距 ${v.gap.toFixed(3)}u < ${v.required}u`);
   }
 
   /** 同步版场景装配（启动路径；与 FadeSwap 分帧路径共用 buildSceneStage，产物结构一致）。 */
@@ -944,6 +975,8 @@ export class Director {
     if (this.activeWeatherPreset && this.activeWeatherPreset.particles.length > 0) {
       this.particles.reanchorWeather(this.weatherAnchorBase(this.activeWeatherPreset));
     }
+    // 布局约束系统（DEV）：换场装配完成后同样跑 verify（stage1 已 register 新占位表）
+    if (IS_DEV) this.verifyLayoutDev(session.module.id);
   }
 
   /**

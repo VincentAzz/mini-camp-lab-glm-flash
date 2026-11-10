@@ -69,6 +69,23 @@ import { createDeliveryCart } from '@/geom/parts/servicearea/deliveryCart';
 import { createFbm2D, hashStringToSeed } from '@/tex/canvasTex';
 import { hashString, mulberry32 } from '@/shared/rng';
 import { clamp } from '@/shared/math';
+import { layoutGrid } from '@/core/layout';
+import {
+  BENCH_POS_E,
+  BENCH_POS_W,
+  BIN_POS_E,
+  BIN_POS_W,
+  BREAKFAST_POS,
+  CHARGING_POS,
+  DELIVERY_CART_POS,
+  FLAG_POLE_POS,
+  SERVICEAREA_CAMP_POS,
+  SERVICEAREA_ITEMS,
+  SERVICEAREA_SCENE_ID,
+  VENDING_POS_A,
+  VENDING_POS_B,
+  WASH_BASIN_POS,
+} from '@/content/layout/scenes/servicearea';
 
 /* ============================== 场景定值（docs/02 §4.1.4 / docs/05 §7.2.4） ============================== */
 
@@ -662,19 +679,19 @@ function buildProps(ctx: SceneBuildContext): SceneProps {
   group.add(vendingMachines);
   const vendingA = createVendingMachine({ assets, id: 'vending/servicearea-a', seed: hashStringToSeed('servicearea/vending-a') });
   vendingA.group.name = 'servicearea/vending-a';
-  vendingA.group.position.set(-4.5, LOT_Y, -5.42);
+  vendingA.group.position.set(VENDING_POS_A.x, LOT_Y, VENDING_POS_A.z);
   vendingA.group.rotation.y = 0.14;
   vendingMachines.add(vendingA.group);
   const vendingB = createVendingMachine({ assets, id: 'vending/servicearea-b', seed: hashStringToSeed('servicearea/vending-b') });
   vendingB.group.name = 'servicearea/vending-b';
-  vendingB.group.position.set(4.75, LOT_Y, -5.42);
+  vendingB.group.position.set(VENDING_POS_B.x, LOT_Y, VENDING_POS_B.z);
   vendingB.group.rotation.y = -0.14;
   vendingMachines.add(vendingB.group);
   const vendingLamp: LampHandle = {
     emissiveMat: vendingA.stripMaterial,
     halo: (() => {
       const halo = makeHaloSprite(assets, 'servicearea/vending-halo-a', 0.8, CHANNELS.vendingCyan);
-      halo.position.set(-4.5, 1.22, -5.32);
+      halo.position.set(VENDING_POS_A.x, 1.22, VENDING_POS_A.z + 0.1);
       group.add(halo);
       return halo;
     })(),
@@ -685,16 +702,13 @@ function buildProps(ctx: SceneBuildContext): SceneProps {
   lamps.push(vendingLamp);
   // B 机灯带/halo：每帧从 A 机输出同步（2 台共用 1 句柄——7.1.4 表「售货机灯带」单行）
   const vendingHaloB = makeHaloSprite(assets, 'servicearea/vending-halo-b', 0.8, CHANNELS.vendingCyan);
-  vendingHaloB.position.set(4.75, 1.22, -5.32);
+  vendingHaloB.position.set(VENDING_POS_B.x, 1.22, VENDING_POS_B.z + 0.1);
   group.add(vendingHaloB);
 
   /* — ④ 电动车充电桩 ×2（屏幕+指示灯 blink 2.4s 绿；右列小车位桩位）— */
   const charging = createChargingPilePair(
     { assets, id: 'charging/servicearea' },
-    [
-      { position: [5.9, LOT_Y, 0.42], rotY: 0 },
-      { position: [8.4, LOT_Y, 0.42], rotY: 0 },
-    ],
+    CHARGING_POS.map((p) => ({ position: [p.x, LOT_Y, p.z] as [number, number, number], rotY: 0 })),
   );
   charging.group.name = 'servicearea/charging';
   group.add(charging.group);
@@ -757,8 +771,8 @@ function buildProps(ctx: SceneBuildContext): SceneProps {
   const benchSnowParts: THREE.BufferGeometry[] = [];
   const benchIdA = 'benchSlat/servicearea-west';
   for (const [bx, bz] of [
-    [-6.9, 6.55],
-    [2.6, 6.55],
+    [BENCH_POS_W.x, BENCH_POS_W.z],
+    [BENCH_POS_E.x, BENCH_POS_E.z],
   ] as const) {
     const bench = createBench({ assets, id: benchIdA, withBackrest: false, slatColor: '#9a7a52' }); // 同 id：几何/材质缓存共享（×2 摆位）
     bench.name = `servicearea/bench-${bx}`;
@@ -776,8 +790,8 @@ function buildProps(ctx: SceneBuildContext): SceneProps {
   group.add(benchSnow);
   const benchSlatMaterial = toonMaterials.get('wood', { color: '#9a7a52', name: `${benchIdA}/slats` });
   for (const [bx, bz] of [
-    [-5.6, 6.55],
-    [3.6, 6.55],
+    [BIN_POS_W.x, BIN_POS_W.z],
+    [BIN_POS_E.x, BIN_POS_E.z],
   ] as const) {
     const bin = createTrashBin({ assets, id: 'trashBin/servicearea' });
     bin.name = `servicearea/bin-${bx}`;
@@ -791,7 +805,8 @@ function buildProps(ctx: SceneBuildContext): SceneProps {
        以保持 2.4.2 注册表三键口径）— */
   const tablewareSet = buildBreakfastSet(assets);
   tablewareSet.name = 'servicearea/breakfast-set';
-  tablewareSet.position.set(2.6, 0.44, 6.55); // 东侧长椅座面（座板顶 ≈0.4375，benchSlat.ts:41-42）
+  // 布局约束系统重排（本轮）：随东长椅（BENCH_POS_E）座面（座板顶 ≈0.4375，benchSlat.ts:41-42）
+  tablewareSet.position.set(BREAKFAST_POS.x, 0.44, BREAKFAST_POS.z);
   tablewareSet.rotation.y = -0.08;
   tablewareSet.scale.setScalar(0.9); // 长椅座深 0.54u——原木凳面档同款缩放（pineforest 口径）
   tablewareSet.visible = false;
@@ -802,13 +817,13 @@ function buildProps(ctx: SceneBuildContext): SceneProps {
   /* — ⑪ 洗手池（台+盆+弯管龙头+镜背板；食堂段东侧墙边）— */
   const washBasin = createWashBasin({ assets, id: 'washBasin/servicearea' });
   washBasin.name = 'servicearea/wash-basin';
-  washBasin.position.set(4.2, LOT_Y, -6.28);
+  washBasin.position.set(WASH_BASIN_POS.x, LOT_Y, WASH_BASIN_POS.z);
   group.add(washBasin);
 
   /* — ⑫ 旗杆小旗（clothMicro 橙白双色条；ClothHandle stiffness 0.25——7-4-④）— */
   const flagPole = createFlagPole({ assets, id: 'flagPole/servicearea' });
   flagPole.group.name = 'servicearea/flag-pole';
-  flagPole.group.position.set(-9.1, LOT_Y, -4.35);
+  flagPole.group.position.set(FLAG_POLE_POS.x, LOT_Y, FLAG_POLE_POS.z);
   group.add(flagPole.group);
   const flagTexture = assets.texture('servicearea/tex/flag', () =>
     paintCanvasTexture('servicearea/tex/flag', 128, 96, drawFlagStripes, true),
@@ -836,7 +851,7 @@ function buildProps(ctx: SceneBuildContext): SceneProps {
   /* — +送货小车（四-1 清晨专属，named deliveryCart；清晨出现/白天收走=离散量 D5）— */
   const cart = createDeliveryCart({ assets, id: 'deliveryCart/servicearea', seed: hashStringToSeed('servicearea/cart') });
   cart.group.name = 'servicearea/delivery-cart';
-  cart.group.position.set(-4.45, LOT_Y, -7.3); // 便利店侧门（西墙）外
+  cart.group.position.set(DELIVERY_CART_POS.x, LOT_Y, DELIVERY_CART_POS.z); // 便利店侧门（西墙）外
   cart.group.rotation.y = 0.42;
   group.add(cart.group);
   propsRef.deliveryCart = cart.group;
@@ -904,6 +919,9 @@ function buildProps(ctx: SceneBuildContext): SceneProps {
     });
   }
   surfaces.push({ material: benchSlatMaterial, kind: 'roofTop', snowShell: benchSnow });
+
+  // 布局约束系统：占位登记（位置常量单一来源 = content/layout/scenes/servicearea.ts）
+  layoutGrid.register(SERVICEAREA_SCENE_ID, SERVICEAREA_ITEMS, SERVICEAREA_CAMP_POS);
 
   /* — 具名道具（2.4.2 注册表口径：named{deliveryCart, storeSign, vendingMachines}）— */
   const signFace = store.group.getObjectByName('store/servicearea/sign-face') ?? store.group;

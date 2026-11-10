@@ -6,10 +6,12 @@
 import { devStats, Engine } from '@/core/engine';
 import { Director } from '@/core/director';
 import type { AppState } from '@/core/state';
+import { layoutGrid } from '@/core/layout';
 import { sceneRegistry } from '@/content/scenes/registry';
 import { vehicleRegistry } from '@/content/vehicles/registry';
 import { timeRegistry } from '@/content/times/registry';
 import { weatherRegistry } from '@/content/weathers/registry';
+import { VEHICLE_ENVELOPES } from '@/content/layout/vehicles';
 import { mountControlPanel } from '@/ui/ControlPanel';
 import { mountHiddenMode } from '@/ui/hiddenMode';
 import '@/ui/uiStyle.css';
@@ -21,6 +23,10 @@ if (!app) {
 
 // 背景交给 render/sky.ts 渐变穹顶（T31⑧：纯色 #0e1520 占位背景移除——穹顶 BackSide 全向覆盖）。
 const engine = new Engine(app, {});
+
+// 布局约束系统（组装点职责）：车型包络表注入（场景占位表由各场景 buildProps register；
+// Director（DEV）装配后跑 verify，scripts/check-layout.mjs 用同一份数据离线校验）。
+layoutGrid.setVehicleEnvelopes(VEHICLE_ENVELOPES);
 
 // 时间/天气注册表：T29/T30 正式预设 import 接入（原 T01 占位 Registry 注入行按本文件原注记替换）——
 // applyState 经 isDefault 自动取档（dusk/晴朗为默认），四档时间/五档天气全链路生效。

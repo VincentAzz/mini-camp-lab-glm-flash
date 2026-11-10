@@ -63,6 +63,19 @@ import {
 import { createFbm2D, hashStringToSeed } from '@/tex/canvasTex';
 import { mulberry32 } from '@/shared/rng';
 import { clamp } from '@/shared/math';
+import { layoutGrid } from '@/core/layout';
+import {
+  ANCHOR_A as ANCHOR_LAYOUT,
+  ANCHOR_B as ANCHOR_B_LAYOUT,
+  FIRE_POS as FIRE_LAYOUT,
+  FIREWOOD_POS,
+  PINEFOREST_CAMP_POS,
+  PINEFOREST_ITEMS,
+  PINEFOREST_SCENE_ID,
+  SIGN_POS as SIGN_LAYOUT,
+  TOWEL_POST as TOWEL_POST_LAYOUT,
+  TREE_CAMP_CLEAR,
+} from '@/content/layout/scenes/pineforest';
 
 /* ============================== 场景定值（docs/02 §4.1.0 / §4.1.2） ============================== */
 
@@ -87,20 +100,19 @@ const CAMP_Z = 0.2;
 const CAMP_HEADING = 0.2;
 const CAMP_RADIUS = 4.0;
 /** 篝火/平台/锚树等布置位（营位半径外缘 or 车身侧向净空外，J2 车辆不停平台）。
- *  穿模修复（clip-evidence）：原 (3.3,1.15) 火圈+凳环整体处于长车前轮/翼子板带（A/拖挂/越野组合），
- *  连同环形凳外挪至 (+0.4,+2.6)（帐篷晾绳区外缘，五车型轮组包络净距 ≥0.25）。 */
-const FIRE_POS = new THREE.Vector3(3.7, GRAVEL_TOP, 3.75);
+ *  布局约束系统重排（本轮）：FIRE_POS/锚树 ×2/晾绳桩/指示牌 x/z 逐字改引
+ *  content/layout/scenes/pineforest.ts 单一来源（旧值与重排依据见该文件注记）。 */
+const FIRE_POS = new THREE.Vector3(FIRE_LAYOUT.x, GRAVEL_TOP, FIRE_LAYOUT.z);
 const PLATFORM_POS = new THREE.Vector3(-3.3, GRAVEL_TOP, -2.9);
 /** 板格 4.6×3.8（2.2.2-③ 逐字）；板条净宽留边 0.16。 */
 const PLATFORM_SIZE = { w: 4.6, d: 3.8 };
 const PLATFORM_PLANK_W = PLATFORM_SIZE.w - 0.16;
-const ANCHOR_A = new THREE.Vector3(4.75, GRAVEL_TOP, -0.55); // 锚树 ×2（承担吊床/晾绳挂点）
-const ANCHOR_B = new THREE.Vector3(4.45, GRAVEL_TOP, 2.45);
+const ANCHOR_A = new THREE.Vector3(ANCHOR_LAYOUT.x, GRAVEL_TOP, ANCHOR_LAYOUT.z); // 锚树 ×2（承担吊床/晾绳挂点）
+const ANCHOR_B = new THREE.Vector3(ANCHOR_B_LAYOUT.x, GRAVEL_TOP, ANCHOR_B_LAYOUT.z);
 const BRIDGE_CENTER = new THREE.Vector3(-8.55, 0, -4.83); // 谷上（y 由桥体局部高度给出）
 const BRIDGE_ROT_Y = Math.atan2(VALLEY_N.x, VALLEY_N.y); // 桥长轴垂直谷向
-const TOWEL_POST = new THREE.Vector3(2.3, GRAVEL_TOP, 3.6); // 晾绳另一端立柱（一端挂锚树 B）
-// 穿模修复（clip-evidence）：指示牌原位横穿拖挂挂车尾/B 型尾门，沿 −x 外挪 1.1 脱离车尾包络
-const SIGN_POS = new THREE.Vector3(-4.45, GRAVEL_TOP, 1.75);
+const TOWEL_POST = new THREE.Vector3(TOWEL_POST_LAYOUT.x, GRAVEL_TOP, TOWEL_POST_LAYOUT.z); // 晾绳另一端立柱（一端挂锚树 B）
+const SIGN_POS = new THREE.Vector3(SIGN_LAYOUT.x, GRAVEL_TOP, SIGN_LAYOUT.z); // 指路木牌（布局约束系统重排）
 
 /** 色彩通道（2.2.3 十通道，docs/02 定值逐字）。 */
 const CHANNELS = {
@@ -640,7 +652,8 @@ function buildProps(ctx: SceneBuildContext): SceneProps {
   ];
   const canPlaceTree = (x: number, z: number): boolean => {
     if (valleyDistance(x, z) < VALLEY_CUT_HALF + 0.55) return false; // 谷带+斜坡余量
-    if (Math.hypot(x - CAMP_X, z - CAMP_Z) < 4.35) return false; // 营位净空
+    // 布局约束系统（本轮）：营位净空 4.35→4.9（树干心距车辆包络 ≥0.25+干半径，与包络表同口径）
+    if (Math.hypot(x - CAMP_X, z - CAMP_Z) < TREE_CAMP_CLEAR) return false; // 营位净空
     if (Math.abs(x - PLATFORM_POS.x) < 2.85 && Math.abs(z - PLATFORM_POS.z) < 2.45) return false; // 平台+步道
     for (const ex of exclusions) {
       if (Math.hypot(x - ex.x, z - ex.z) < ex.r) return false;
@@ -850,12 +863,7 @@ function buildProps(ctx: SceneBuildContext): SceneProps {
     withShell: true,
     name: 'pineforest/firewood-stacks',
   });
-  const woodSpecs: readonly { x: number; z: number; rotY: number }[] = [
-    // 穿模修复（clip-evidence）：#0 原位撞 A 型前保险杠/拖挂皮卡前轮，#2 原位与新凳环/越野帆布杆相叠，三堆外挪错位
-    { x: 5.65, z: -0.05, rotY: 0.5 },
-    { x: 5.4, z: 2.75, rotY: -0.3 },
-    { x: 2.43, z: 2.25, rotY: 0.9 },
-  ];
+  const woodSpecs = FIREWOOD_POS; // 布局约束系统重排（本轮）：柴堆 ×3 位置单一来源（三堆出包络带，错位原样保留）
   const woodMatrix = new THREE.Matrix4();
   for (const spec of woodSpecs) {
     woodMatrix.identity().setPosition(spec.x, y, spec.z);
@@ -1247,6 +1255,9 @@ function buildProps(ctx: SceneBuildContext): SceneProps {
       additive: false,
     });
   }
+
+  // 布局约束系统：占位登记（位置常量单一来源 = content/layout/scenes/pineforest.ts）
+  layoutGrid.register(PINEFOREST_SCENE_ID, PINEFOREST_ITEMS, PINEFOREST_CAMP_POS);
 
   return {
     group,

@@ -36,6 +36,7 @@ import type {
   WindowSpec,
 } from '@/content/vehicles/types';
 import { GLASS_NIGHT_OPACITY, GLASS_OPACITY } from '@/content/vehicles/types';
+import { VEHICLE_BODIES } from '@/content/layout/vehicles'; // 布局约束系统：footprint 字面量同源
 import type { ClothHandle, LampHandle, RGB, SharedAssets, WeatherSurface } from '@/systems/handles';
 import { toonMaterials } from '@/render/toonMaterial';
 import { hardenEdges, lathe, mergeGeometries, roundedBox, tube } from '@/geom/primitives';
@@ -109,8 +110,9 @@ const LAMPS = { stripGain: 1.0, bedGain: 0.5, bathGain: 0.25, breathPeriod: 6, b
 /** 车内暖光点光（docs/03 §4.2.0 模板：强度 1.15×power×emphasis；draft §4.4 位 (0,2.1,0) distance 7）。 */
 const FILL_LIGHT = { position: [0, 2.1, 0], color: COLORS.fillLight, distance: 7.0, decay: 1.8, gain: 1.15 } as const;
 
-/** footprint（docs/03 §4.2.2 ★半径仲裁回调：7.9×2.7 外接半径 hypot(3.95,1.35)≈4.175 ≤4.2）。 */
-const FOOTPRINT = { length: 7.9, width: 2.7, track: F.wheelZ * 2, height: 3.7 } as const;
+/** footprint（docs/03 §4.2.2 ★半径仲裁回调：7.9×2.7 外接半径 hypot(3.95,1.35)≈4.175 ≤4.2）。
+ *  布局约束系统（本轮）：length/width 同源引用 content/layout/vehicles.ts（车身字面量唯一来源）。 */
+const FOOTPRINT = { length: VEHICLE_BODIES.classA.length, width: VEHICLE_BODIES.classA.width, track: F.wheelZ * 2, height: 3.7 } as const;
 
 /** PaintSpec 色带（v 区间按车身 y0.55..3.05 换算：(y−0.55)/2.5；藏青裙 0..0.24 + 金线 0.24..0.264）。 */
 const STRIPE_SPEC: readonly PaintStripe[] = [

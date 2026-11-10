@@ -37,6 +37,7 @@ import type {
   WindowSpec,
 } from '@/content/vehicles/types';
 import { GLASS_NIGHT_OPACITY, GLASS_OPACITY } from '@/content/vehicles/types';
+import { VEHICLE_BODIES } from '@/content/layout/vehicles'; // 布局约束系统：footprint 字面量同源
 import type { ClothHandle, LampHandle, RGB, SharedAssets, WeatherSurface } from '@/systems/handles';
 import { toonMaterials } from '@/render/toonMaterial';
 import { hardenEdges, lathe, mergeGeometries, roundedBox, tube } from '@/geom/primitives';
@@ -113,8 +114,9 @@ const F = {
   headingTrim: 0.06, // docs/03 §4.2.0 拖挂组合微调（裁定④）
 } as const;
 
-/** footprint=组合尺寸（★半径仲裁回调：8.0×2.5，外接半径 hypot(4.0,1.25)≈4.19≤4.2；裁定①）。 */
-const FOOTPRINT = { length: 8.0, width: 2.5, track: F.pkWheelZ * 2, height: 2.42 } as const;
+/** footprint=组合尺寸（★半径仲裁回调：8.0×2.5，外接半径 hypot(4.0,1.25)≈4.19≤4.2；裁定①）。
+ *  布局约束系统（本轮）：length/width 同源引用 content/layout/vehicles.ts（车身字面量唯一来源）。 */
+const FOOTPRINT = { length: VEHICLE_BODIES.trailerRig.length, width: VEHICLE_BODIES.trailerRig.width, track: F.pkWheelZ * 2, height: 2.42 } as const;
 
 /** PaintSpec（拖挂白主体+薄荷/粉线 v 区间按侧板 y0.80..2.24 换算：(y−0.80)/1.44；皮卡深蓝为副主体色）。 */
 const STRIPE_SPEC: readonly PaintStripe[] = [
